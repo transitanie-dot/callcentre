@@ -1990,10 +1990,27 @@ async function aplicarEstado(meu) {
   // A presença pode ter expirado enquanto a página esteve fechada.
   // Nesse caso não se retoma nada: estar ao serviço tem de ser uma
   // decisão de agora, não a herança de uma sessão de ontem.
+  /**
+   * O relógio continua de onde estava.
+   *
+   * O estadoDesde arrancava em Date.now(), por isso um
+   * recarregamento fazia a contagem recomeçar do zero — e o tempo
+   * do dia parecia perder-se de cada vez que se atualizava a
+   * página.
+   *
+   * O servidor sabe quando o período começou: está no
+   * agent_state_log e vem na vista support_team.
+   */
+  var desde = null;
+  if (meu.state_since) {
+    var inicio = Date.parse(meu.state_since);
+    if (inicio && !isNaN(inicio)) desde = inicio;
+  }
+
   var visto = meu.last_seen_at ? Date.parse(meu.last_seen_at) : 0;
   if (!visto || Date.now() - visto > 5 * 60000) return;
 
-  await setDeskState(meu.state, true);
+  await setDeskState(meu.state, true, desde);
 }
 
 async function loadDisplayName() {
@@ -2381,19 +2398,26 @@ function pedirEscolha() {
   }, 1000);
 }
 
-async function setDeskState(state, aRetomar) {
+async function setDeskState(state, aRetomar, desdeQuando) {
   var previous = desk.state;
   desk.state = state;
 
   if (state !== 'offline') el('wentOffline').classList.add('hidden');
 
   // O tempo no estado anterior fica contado; o novo começa agora.
+  // Só se reinicia o relógio se o estado MUDOU mesmo. Uma chamada
+  // com o mesmo estado — a retomar depois de um refresh, por
+  // exemplo — deixaria a contagem a zero.
   if (previous !== state) {
     if (previous && previous !== 'unknown' && previous !== 'offline') {
       tempoDoDia[previous] = (tempoDoDia[previous] || 0) +
         Math.round((Date.now() - estadoDesde) / 1000);
     }
-    estadoDesde = Date.now();
+
+    // A retomar depois de um refresh, o período começou quando o
+    // servidor diz que começou — não agora. Sem isto a contagem
+    // recomeçava do zero a cada atualização da página.
+    estadoDesde = desdeQuando || Date.now();
   }
 
   pintarDuty();

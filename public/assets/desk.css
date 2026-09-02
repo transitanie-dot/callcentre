@@ -1132,3 +1132,14 @@
   background:var(--accent);color:#fff}
 .duty-role.agent{background:var(--card);color:var(--muted);
   box-shadow:inset 0 0 0 1px var(--border)}
+
+/* Um contador quente: alguém está à espera de uma decisão.
+   O .dot.hot já existia; o .count.hot não, e o número aparecia em
+   âmbar como qualquer outra contagem. Uma candidatura parada uma
+   semana é um motorista que desiste. */
+.tab-btn .count.hot{background:var(--bad);color:#fff;
+  animation:countPulse 2.2s ease-in-out infinite}
+@keyframes countPulse{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){
+  .tab-btn .count.hot{animation:none}
+}

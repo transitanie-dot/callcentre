@@ -67,6 +67,20 @@ function marcas() {
  * etiqueta <script> normal, antes do desk.js, e não há um momento
  * em que o painel esteja desenhado mas sem saber que marcas existem.
  */
+/**
+ * A versão dos ficheiros do painel.
+ *
+ * O CSS e o JS levam cache de sete dias, e isso é bom — mas
+ * significa que uma correção pode levar uma semana a chegar a quem
+ * já tem o painel aberto.
+ *
+ * O index referencia-os com ?v=<versão>. Quando esta muda, o
+ * endereço muda, e o browser é obrigado a ir buscar o novo. O
+ * Render põe a RENDER_GIT_COMMIT sozinho a cada publicação, por
+ * isso a versão muda a cada deploy sem se tocar em nada.
+ */
+const VERSAO = (process.env.RENDER_GIT_COMMIT || String(Date.now())).slice(0, 8);
+
 app.get('/assets/config.js', (req, res) => {
   const cfg = {
     supabaseUrl: process.env.SUPABASE_URL || '',
@@ -164,8 +178,34 @@ if (!fs.existsSync(INDEX)) {
 app.use((req, res) => {
   res.set('Cache-Control', 'no-store');
 
-  res.sendFile(INDEX, (err) => {
-    if (!err) return;
+  // O index é lido e servido com a versão injetada, em vez de
+  // enviado tal e qual: assim os endereços do CSS e do JS mudam a
+  // cada publicação e ninguém fica com uma versão velha.
+  fs.readFile(INDEX, 'utf8', (err, html) => {
+    if (!err) {
+      /**
+       * Confirma que é mesmo o painel.
+       *
+       * Se o public/index.html for substituído por outra coisa — um
+       * ficheiro trocado numa publicação, por exemplo — o servidor
+       * mandava-o na mesma, e o browser mostrava JavaScript como
+       * texto sem nada explicar porquê.
+       */
+      if (html.indexOf('<!DOCTYPE') !== 0 && html.indexOf('<html') < 0) {
+        console.error('public/index.html does not look like HTML. First 80 chars:',
+          JSON.stringify(html.slice(0, 80)));
+
+        return res.status(500).type('text/plain').send(
+          'public/index.html is not an HTML file.\n\n' +
+          'It starts with: ' + html.slice(0, 60) + '\n\n' +
+          'Something was overwritten during deployment.'
+        );
+      }
+
+      return res.type('html').send(
+        html.replace(/\/assets\/(desk\.css|desk\.js)/g, '/assets/$1?v=' + VERSAO)
+      );
+    }
 
     // Um sendFile que falha não escreve nada em lado nenhum: a
     // resposta fica pendurada e o browser espera até desistir.

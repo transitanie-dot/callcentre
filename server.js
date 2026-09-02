@@ -23,6 +23,7 @@
  */
 
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -140,9 +141,43 @@ app.use((req, res, next) => {
 // Express 5 removeu o asterisco como padrão e rebenta no arranque
 // com "Missing parameter name" — o serviço nem sobe, e do lado do
 // browser vê-se 502, que não aponta para lado nenhum.
+const INDEX = path.join(ROOT, 'public', 'index.html');
+
+/**
+ * O painel não está lá? Diz-se logo no arranque.
+ *
+ * Sem isto o serviço sobe, o /health responde, e a raiz devolve um
+ * erro vazio — o que parece o painel a carregar para sempre. Foi
+ * exatamente isso que aconteceu, e não havia nada nos registos que
+ * apontasse para o ficheiro em falta.
+ */
+if (!fs.existsSync(INDEX)) {
+  console.error(
+    '\n  public/index.html is missing.\n' +
+    '  Looked in: ' + INDEX + '\n' +
+    '  The service will start, but the panel will not load.\n' +
+    '  Check that the public/ folder was pushed, and that Root Directory\n' +
+    '  on Render points at the folder containing server.js.\n'
+  );
+}
+
 app.use((req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(ROOT, 'public/index.html'));
+
+  res.sendFile(INDEX, (err) => {
+    if (!err) return;
+
+    // Um sendFile que falha não escreve nada em lado nenhum: a
+    // resposta fica pendurada e o browser espera até desistir.
+    console.error('Could not send index.html:', err.message);
+
+    res.status(500).type('text/plain').send(
+      'The panel files are not on the server.\n\n' +
+      'Expected: public/index.html\n' +
+      'Looked in: ' + INDEX + '\n\n' +
+      'This is a deployment problem, not a code one.'
+    );
+  });
 });
 
 app.listen(PORT, () => {

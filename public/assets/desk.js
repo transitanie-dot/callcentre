@@ -68,7 +68,9 @@ function reportHeight() {
   notifyParent({ type: 'resize', height: h });
 }
 if (window.ResizeObserver) new ResizeObserver(reportHeight).observe(document.body);
-window.addEventListener('load', reportHeight);
+// O load pode já ter disparado — este ficheiro corre com defer.
+if (document.readyState === 'complete') reportHeight();
+else window.addEventListener('load', reportHeight);
 [300, 900, 2000].forEach(function (ms) { setTimeout(reportHeight, ms); });
 notifyParent('ready');
 
@@ -668,10 +670,28 @@ var desk = {
     deskDisplayName = localStorage.getItem('airportlink-agent-name') || null;
   } catch (e) {}
 
-  document.addEventListener('DOMContentLoaded', function () {
+  /**
+   * Com defer, o DOMContentLoaded já disparou.
+   *
+   * Este ficheiro é carregado com defer, o que significa que corre
+   * DEPOIS de o documento estar pronto — e um listener registado
+   * aqui nunca chega a ser chamado.
+   *
+   * Enquanto esteve dentro do HTML isto funcionava, porque o script
+   * corria a meio do carregamento. Ao separar os ficheiros deixou
+   * de funcionar, e o painel ficava preso em 'unknown' com os
+   * botões de estado desativados.
+   */
+  var pintar = function () {
     if (deskDisplayName && el('deskNameText')) paintDisplayName();
     document.body.setAttribute('data-duty', 'unknown');
-  });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pintar);
+  } else {
+    pintar();
+  }
 })();
 
 /**

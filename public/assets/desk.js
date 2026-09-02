@@ -139,8 +139,8 @@ var allBookings = [], bookingPage = 1, bookingPerPage = 50;
 var contacts = [], contactFilters = { search:'', searchId:'' }, contactPage = 1, contactPerPage = 50;
 var selectedContactBookings = [], selectedContactChats = [];
 var conversations = [], convFilters = { search:'', status:'', subject:'' };
-var agents = [], agentFilters = { search: '', status: 'pending' };
-var partners = [], ptFilters = { search: '', status: 'needs' };
+var agents = [], agentFilters = { search: '', status: 'all' };
+var partners = [], ptFilters = { search: '', status: 'all' };
 var charges = [], unclaimed = [];
 var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
@@ -2407,7 +2407,20 @@ function pintarDuty() {
     pic.classList.add('hidden');
     btn.classList.remove('has-pic');
   }
-  el('dutyLabel').textContent = desk.state === 'unknown' ? 'Checking' : info.label;
+  /**
+   * O tempo no estado atual, no próprio botão.
+   *
+   * Estava só na barra da direita e dentro do menu. A pergunta
+   * "há quanto tempo estou assim" é frequente demais para exigir
+   * um clique ou desviar o olhar para o outro lado do ecrã.
+   */
+  var nele = desk.state && desk.state !== 'unknown' && desk.state !== 'offline'
+    ? duracao(Math.round((Date.now() - estadoDesde) / 1000))
+    : null;
+
+  el('dutyLabel').textContent = desk.state === 'unknown'
+    ? 'Checking'
+    : info.label + (nele ? ' · ' + nele : '');
 
   btn.style.setProperty('--duty-color', info.color);
   btn.classList.toggle('taking', Boolean(info.takes));
@@ -2666,7 +2679,12 @@ function arrancarDia() {
   if (diaTimer) clearInterval(diaTimer);
   // De dez em dez segundos chega: os números são em minutos, e um
   // intervalo por segundo só gastaria bateria.
-  diaTimer = setInterval(pintarDia, 10000);
+  diaTimer = setInterval(function () {
+    pintarDia();
+    // O botão também: sem isto o tempo lá ficava parado no valor
+    // que tinha quando o estado mudou.
+    pintarDuty();
+  }, 10000);
 }
 
 // ============================================================
@@ -3358,8 +3376,20 @@ async function loadContacts() {
   var tbody = el('contactsList');
   tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading...</td></tr>';
 
+  /**
+   * Só clientes.
+   *
+   * A contacts guarda toda a gente com conta: clientes, parceiros
+   * de motoristas, agências e os próprios agentes — o registo de
+   * um parceiro cria lá uma linha para o email e o nome.
+   *
+   * Misturá-los nesta lista fazia "Accounts" mostrar quatro
+   * públicos diferentes sem os distinguir. As outras tabelas têm
+   * separador próprio.
+   */
   var q = client.from('contacts')
     .select('id, display_id, full_name, email, phone_number, is_admin, created_at')
+    .eq('is_admin', false)
     .order('created_at', { ascending: false });
 
   if (contactFilters.search) {
@@ -3369,13 +3399,36 @@ async function loadContacts() {
     q = q.eq('display_id', parseInt(contactFilters.searchId, 10) || contactFilters.searchId);
   }
 
+  /**
+   * Os motoristas e as agências saem daqui.
+   *
+   * O is_admin acima tira os agentes, mas um parceiro de
+   * motoristas também tem linha na contacts — o registo dele
+   * cria-a — e o id é o mesmo nas duas tabelas.
+   *
+   * Filtra-se depois de ler, e não com um "not in" na consulta,
+   * porque o Supabase não deixa correlacionar tabelas assim a
+   * partir do browser. Com alguns milhares de contas isto é
+   * instantâneo; se um dia forem centenas de milhares, passa a
+   * ser uma vista no Postgres.
+   */
   var res = await q;
   if (res.error) {
     tbody.innerHTML = '<tr><td colspan="6" class="error-row">' + escapeHtml(res.error.message) + '</td></tr>';
     return;
   }
 
-  contacts = res.data || [];
+  var outros = await Promise.all([
+    client.from('driver_partners').select('id'),
+    client.from('travel_agents').select('id')
+  ]);
+
+  var excluir = {};
+  outros.forEach(function (r) {
+    (r.data || []).forEach(function (x) { excluir[x.id] = true; });
+  });
+
+  contacts = (res.data || []).filter(function (c) { return !excluir[c.id]; });
   contactPage = 1;
   renderContacts(); renderContactStats(); renderContactPagination();
 }
@@ -4895,8 +4948,12 @@ function renderPartners() {
   var box = el('ptList');
   var list = partners.slice();
 
+  // 'all' e vazio mostram tudo. Sem esta linha o 'all' era tratado
+  // como um estado e a lista vinha vazia.
   if (ptFilters.status === 'needs') list = list.filter(needsAction);
-  else if (ptFilters.status) list = list.filter(function (p) { return p.status === ptFilters.status; });
+  else if (ptFilters.status && ptFilters.status !== 'all') {
+    list = list.filter(function (p) { return p.status === ptFilters.status; });
+  }
 
   if (ptFilters.search) {
     var q = ptFilters.search.toLowerCase();
@@ -5181,7 +5238,7 @@ el('ptSearchBtn').addEventListener('click', function () {
 el('ptResetBtn').addEventListener('click', function () {
   el('ptSearch').value = '';
   el('ptStatusFilter').value = 'needs';
-  ptFilters = { search: '', status: 'needs' };
+  ptFilters = { search: '', status: 'all' };
   loadPartners();
 });
 el('ptStatusFilter').addEventListener('change', function () {
@@ -5258,7 +5315,7 @@ function renderAgents() {
   var box = el('agentList');
   var list = agents.slice();
 
-  if (agentFilters.status) {
+  if (agentFilters.status && agentFilters.status !== 'all') {
     list = list.filter(function (a) { return a.status === agentFilters.status; });
   }
   if (agentFilters.search) {
@@ -5383,7 +5440,7 @@ el('agentSearchBtn').addEventListener('click', function () {
 el('agentRefreshBtn').addEventListener('click', function () {
   el('agentSearch').value = '';
   el('agentStatusFilter').value = 'pending';
-  agentFilters = { search: '', status: 'pending' };
+  agentFilters = { search: '', status: 'all' };
   loadAgents();
 });
 
@@ -5461,13 +5518,23 @@ function paintTabAlerts() {
 
   set('bookingsBadge', noPartner + refunds, refunds > 0);
 
-  // Parceiros à espera de decisão.
-  set('partnersBadge', (typeof partners !== 'undefined'
-    ? partners.filter(needsAction).length : 0), false);
+  /**
+   * Motoristas e agências à espera de uma decisão, a vermelho.
+   *
+   * Estava a false, e por isso o número aparecia em cinzento como
+   * qualquer outra contagem. Mas estes são pessoas paradas à espera
+   * de alguém — uma candidatura de motorista parada uma semana é um
+   * motorista que desiste, e um número cinzento não chama ninguém.
+   */
+  var ptWaiting = (typeof partners !== 'undefined'
+    ? partners.filter(needsAction).length : 0);
 
-  // Agências à espera.
-  set('agentsBadge', (typeof agents !== 'undefined'
-    ? agents.filter(function (a) { return a.status === 'pending'; }).length : 0), false);
+  set('partnersBadge', ptWaiting, ptWaiting > 0);
+
+  var agWaiting = (typeof agents !== 'undefined'
+    ? agents.filter(function (a) { return a.status === 'pending'; }).length : 0);
+
+  set('agentsBadge', agWaiting, agWaiting > 0);
 
   // Cobranças agendadas e viagens que ninguém pegou.
   set('moneyBadge',

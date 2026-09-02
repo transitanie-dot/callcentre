@@ -63,12 +63,28 @@
   </div>
 </div>
 
-<div class="went-off hidden" id="wentOffline">
-  <span><strong>You were set to offline.</strong>
-  A chat rang for 30 seconds and nothing was pressed, so it went to someone else.
-  This is recorded in your activity.</span>
-  <button class="back" id="backOnline" type="button">I am back — go live</button>
-  <button id="stayOffline" type="button">Stay offline</button>
+<!-- No meio do ecrã, não numa barra no topo.
+     Quem deixou passar trinta segundos de toque não estava a olhar
+     para o painel — e uma faixa fina no topo é precisamente o que
+     essa pessoa não vai ver ao voltar. -->
+<div class="still-back hidden" id="wentOffline">
+  <div class="still" role="alertdialog" aria-labelledby="stillTitle">
+    <div class="still-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/>
+      </svg>
+    </div>
+    <h2 id="stillTitle">Are you still there?</h2>
+    <p>A chat rang for thirty seconds and nothing was pressed, so it went to
+    someone else and you were set to offline.</p>
+    <p class="still-note">No chats reach you until you go back. This is recorded
+    in your activity.</p>
+    <div class="still-btns">
+      <button class="still-no" id="stayOffline" type="button">Stay offline</button>
+      <button class="still-yes" id="backOnline" type="button">I am back — go live</button>
+    </div>
+  </div>
 </div>
 
 <div class="duty-bar" id="dutyBar" aria-hidden="true"></div>
@@ -97,18 +113,32 @@
 
 <div class="deskbar">
   <span class="deskbar-label">Status</span>
-  <div class="states" id="states">
-    <button class="st live" data-state="live" type="button">
-      <span class="dot"></span>Live</button>
-    <button class="st brk" data-state="break" type="button">
-      <span class="dot"></span>Break</button>
-    <!-- Sem 'active' de origem. Estava a dizer offline antes de o
-         painel ter perguntado o que quer que fosse — e isso via-se
-         a cada recarregamento, durante o segundo que a resposta
-         demorava a chegar. -->
-    <button class="st off" data-state="offline" type="button">
-      <span class="dot"></span>Offline</button>
+  <!-- Um dropdown, não botões.
+       Com oito estados, oito botões enchiam a barra e ficavam
+       pequenos demais para se acertar neles. -->
+  <div class="duty" id="duty">
+    <button class="duty-btn" id="dutyBtn" type="button" aria-haspopup="listbox"
+            aria-expanded="false">
+      <span class="dot" id="dutyDot"></span>
+      <span id="dutyLabel">&mdash;</span>
+      <svg class="duty-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+
+    <div class="duty-menu" id="dutyMenu" role="listbox" hidden></div>
   </div>
+
+  <!-- Trinta segundos para escolher o que vem a seguir a fechar um
+       chat. Sem isto, um agente que fechasse e fosse tratar de outra
+       coisa aparecia disponível e recebia logo outro. -->
+  <div class="duty-countdown" id="dutyCountdown" hidden>
+    <span id="dutyCountText">Choose your next status</span>
+    <strong id="dutyCountNum">30</strong>
+  </div>
+
+  <!-- O dia até agora. Quanto tempo em cada estado, a somar ao
+       vivo — o estado atual conta desde que começou. -->
+  <div class="daytime" id="dayTime"></div>
 
   <button class="deskbar-alert hidden" id="deskAlert" type="button">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.9-5a8.2 8.2 0 0 1-.9-3.8 8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.2Z"/></svg>

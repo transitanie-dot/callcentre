@@ -1634,6 +1634,13 @@ el('chatTakeBtn').addEventListener('click', async function () {
   el('chatTakeBtn').disabled = false;
 });
 
+/** A conversa aberta, ou um objeto vazio para não rebentar. */
+function chatAtual() {
+  return (desk.chats || []).find(function (c) {
+    return c.chat_id === desk.current;
+  }) || {};
+}
+
 function renderThread() {
   var box = el('chatThread');
   var all = desk.messages;
@@ -1668,8 +1675,26 @@ function renderThread() {
       return;
     }
 
+    /**
+     * A fotografia, só na primeira mensagem de uma sequência.
+     *
+     * Repeti-la em cinco mensagens seguidas da mesma pessoa é ruído
+     * — mas o espaço fica reservado nas outras, senão as bolhas
+     * saltavam para a esquerda a meio de uma sequência.
+     */
+    var quem = mine
+      ? { av: m.sender_avatar, nome: m.sender_name || 'Airportlink' }
+      : { av: chatAtual().partner_avatar,
+          nome: chatAtual().trading_name || chatAtual().legal_name || 'Partner' };
+
+    var foto = avatarUrl(quem.av);
+
     html += '<div class="d-row ' + (mine ? 'mine' : 'theirs') +
-      (turn ? ' turn' : '') + (last ? ' last' : '') + '"><div>' +
+      (turn ? ' turn' : '') + (last ? ' last' : '') + '">' +
+      (foto
+        ? '<img class="msg-pic" src="' + escapeHtml(foto) + '" alt="">'
+        : '<span class="msg-ini">' + escapeHtml(iniciais(quem.nome)) + '</span>') +
+      '<div>' +
       '<div class="d-bub">' +
       (m.attachment_path
         ? '<a class="d-file" href="#" data-dfile="' + escapeHtml(m.attachment_path) + '">' +
@@ -1930,6 +1955,8 @@ async function iniciarApoio() {
 
 /** O nome do servidor, se lá houver algum. */
 function aplicarNome(meu) {
+  if (meu) meuAvatar = meu.avatar_path || null;
+
   if (meu && meu.display_name) {
     deskDisplayName = meu.display_name;
     try { localStorage.setItem(NAME_KEY, meu.display_name); } catch (e) {}
@@ -2208,6 +2235,28 @@ var STATES = [
     note: 'Off duty. You will not be given new chats.' }
 ];
 
+// ============================================================
+// AVATARES
+//
+// As iniciais são o valor por omissão e chegam. A fotografia é
+// opcional, e quando existe ocupa o mesmo espaço — o desenho à
+// volta não muda.
+// ============================================================
+var meuAvatar = null;
+
+/**
+ * O endereço público de um avatar.
+ *
+ * O balde é público de leitura, ao contrário dos documentos e dos
+ * anexos. Assinar cada fotografia obrigaria a um pedido por imagem
+ * e por minuto, e não protegeria nada que não seja já visível a
+ * quem está na conversa.
+ */
+function avatarUrl(caminho) {
+  if (!caminho) return null;
+  return SUPABASE_URL + '/storage/v1/object/public/avatars/' + caminho;
+}
+
 /** As duas primeiras iniciais de um nome, para o avatar. */
 function iniciais(nome) {
   return String(nome || '?').trim().split(/\s+/).slice(0, 2)
@@ -2235,6 +2284,18 @@ function pintarDuty() {
 
   el('dutyName').textContent = nome;
   el('dutyAv').textContent = iniciais(nome);
+
+  var url = avatarUrl(meuAvatar);
+  var pic = el('dutyPic');
+
+  if (url) {
+    pic.src = url;
+    pic.classList.remove('hidden');
+    btn.classList.add('has-pic');
+  } else {
+    pic.classList.add('hidden');
+    btn.classList.remove('has-pic');
+  }
   el('dutyLabel').textContent = desk.state === 'unknown' ? 'Checking' : info.label;
 
   btn.style.setProperty('--duty-color', info.color);
@@ -2254,6 +2315,23 @@ function pintarDuty() {
       (st.key === 'admin' ? '<div class="duty-sep"></div>' : '');
   }).join('');
 
+  // A fotografia, no fim do menu. Ali e não numa página de
+  // definições: é onde a pessoa já está quando pensa em si própria.
+  var url = avatarUrl(meuAvatar);
+
+  el('dutyMenu').innerHTML += '<div class="av-row">' +
+    (url
+      ? '<img class="av-now" src="' + escapeHtml(url) + '" alt="">'
+      : '<span class="av-now duty-av" style="border-radius:12px">' +
+        escapeHtml(iniciais(nomeAtual())) + '</span>') +
+    '<span class="av-txt">' +
+      (url ? 'Your photo' : 'Using your initials') +
+    '</span>' +
+    '<button class="av-act" id="avPick" type="button">' +
+      (url ? 'Change' : 'Add photo') + '</button>' +
+    (url ? '<button class="av-act drop" id="avDrop" type="button">Remove</button>' : '') +
+    '</div>';
+
   qsa('[data-duty-opt]').forEach(function (b) {
     b.addEventListener('click', function () {
       fecharDuty();
@@ -2261,6 +2339,71 @@ function pintarDuty() {
       setDeskState(b.getAttribute('data-duty-opt'));
     });
   });
+
+  var pick = document.getElementById('avPick');
+  if (pick) pick.addEventListener('click', function (e) {
+    e.stopPropagation();
+    el('avatarFile').click();
+  });
+
+  var drop = document.getElementById('avDrop');
+  if (drop) drop.addEventListener('click', function (e) {
+    e.stopPropagation();
+    guardarAvatar(null);
+  });
+}
+
+function nomeAtual() {
+  return deskDisplayName || adminName();
+}
+
+/**
+ * Envia a fotografia e guarda a referência.
+ *
+ * A primeira pasta do caminho é o uuid do agente: é isso que a
+ * política do balde verifica antes de deixar escrever, e o que
+ * impede alguém de substituir a fotografia de outra pessoa.
+ */
+el('avatarFile').addEventListener('change', async function () {
+  var ficheiro = this.files && this.files[0];
+  this.value = '';
+  if (!ficheiro) return;
+
+  if (ficheiro.size > 2 * 1024 * 1024) {
+    return avisar('Too large', 'That image is over 2 MB. A profile photo does not ' +
+      'need to be bigger — try one straight from your phone camera roll rather ' +
+      'than an edited file.');
+  }
+
+  fecharDuty();
+
+  try {
+    var ext = (ficheiro.name.split('.').pop() || 'jpg').toLowerCase();
+    // O tempo no nome força o browser a ir buscar a nova: sem isso,
+    // trocar de fotografia mostrava a antiga até se limpar a cache.
+    var caminho = adminId() + '/avatar-' + Date.now() + '.' + ext;
+
+    var up = await client.storage.from('avatars').upload(caminho, ficheiro, {
+      contentType: ficheiro.type || 'image/jpeg',
+      upsert: true
+    });
+
+    if (up.error) throw new Error(up.error.message);
+
+    await guardarAvatar(caminho);
+  } catch (e) {
+    avisar('Could not save the photo', e.message);
+  }
+});
+
+async function guardarAvatar(caminho) {
+  try {
+    await deskFetch('/api/admin/avatar', { path: caminho });
+    meuAvatar = caminho;
+    pintarDuty();
+  } catch (e) {
+    avisar('Could not save', e.message);
+  }
 }
 
 function abrirDuty() {

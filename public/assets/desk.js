@@ -4921,10 +4921,50 @@ async function init() {
 (async function boot() {
   el('gateView').classList.add('hidden');
   el('bootView').classList.remove('hidden');
+
+  /**
+   * Um limite de tempo à volta do arranque.
+   *
+   * O verifyAdmin fala com o Supabase três vezes. Se uma dessas
+   * chamadas nunca resolver — rede em baixo, chave errada, um
+   * projeto pausado — o await fica pendurado para sempre e o
+   * painel mostra "a carregar" indefinidamente, sem erro nenhum na
+   * consola.
+   *
+   * Ao fim de doze segundos desistimos e mostramos o ecrã de
+   * entrada. Pior do que não conseguir entrar é não perceber que
+   * não se está a conseguir.
+   */
+  var comLimite = function (promessa, ms) {
+    return Promise.race([
+      promessa,
+      new Promise(function (_, rejeitar) {
+        setTimeout(function () {
+          rejeitar(new Error('Supabase did not answer within ' + (ms / 1000) + ' seconds.'));
+        }, ms);
+      })
+    ]);
+  };
+
   try {
-    var session = await verifyAdmin();
+    if (!window.supabase) {
+      throw new Error('The Supabase library did not load. Check the network tab.');
+    }
+
+    var session = await comLimite(verifyAdmin(), 12000);
     if (session) { await enterAdmin(session); return; }
-  } catch (e) { console.error('boot error:', e); }
+  } catch (e) {
+    console.error('boot error:', e);
+
+    // O erro fica no ecrã, não só na consola. Quem está a olhar
+    // para o painel não tem a consola aberta.
+    var aviso = el('gateErr');
+    if (aviso && !aviso.__missing) {
+      aviso.textContent = e.message;
+      aviso.classList.remove('hidden');
+    }
+  }
+
   el('bootView').classList.add('hidden');
   el('gateView').classList.remove('hidden');
   reportHeight();

@@ -1,0 +1,830 @@
+.chat-clock{display:flex;flex-direction:column;align-items:flex-end;gap:2px;
+  padding:0 14px;margin-left:auto}
+.clock-t{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:19px;
+  font-weight:600;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
+.clock-l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted)}
+/* Passados dez minutos com a conversa aberta, o número muda de cor.
+   Não é um alarme — é para se notar de relance numa fila. */
+.chat-clock.warn .clock-t{color:var(--warn,#B7791F)}
+.chat-clock.bad .clock-t{color:var(--bad,#B42318)}
+.chat-clock.done .clock-t{color:var(--muted)}
+
+.date-lab{display:block;font-size:11px;font-weight:600;color:var(--muted);
+  margin:0 0 5px;letter-spacing:.02em}
+    /* Claro por omissão, escuro por escolha. Quem faz turnos de dia
+       num escritório iluminado prefere claro; quem faz noite prefere
+       escuro. O botão está no topo e a escolha fica guardada. */
+    :root{
+      --bg:#F4F6F9;--card:#FFFFFF;--card-2:#F0F3F7;
+      --primary:#2563EB;--primary-soft:rgba(37,99,235,.10);
+      --text:#0F1724;--muted:#5A6982;--border:#DDE3EC;--border-soft:#E8ECF2;
+      --ok:#047857;--ok-bg:rgba(4,120,87,.10);
+      --warn:#B45309;--warn-bg:rgba(180,83,9,.10);
+      --bad:#B42318;--bad-bg:rgba(180,35,24,.10);
+      --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+      --display:'Bricolage Grotesque','Inter',system-ui,sans-serif;
+      --body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+      --radius:14px;
+      --shadow:0 1px 2px rgba(15,23,36,.06),0 8px 24px rgba(15,23,36,.05);
+    }
+    html[data-theme="dark"]{
+      --bg:#0B111C;--card:#141C2B;--card-2:#1A2436;
+      --primary:#4F8EF7;--primary-soft:rgba(79,142,247,.14);
+      --text:#E8EDF5;--muted:#8494AC;--border:#243044;--border-soft:#1C2637;
+      --ok:#34D399;--ok-bg:rgba(52,211,153,.12);
+      --warn:#F5B457;--warn-bg:rgba(245,180,87,.12);
+      --bad:#F87171;--bad-bg:rgba(248,113,113,.12);
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.28);
+    }
+    html{color-scheme:light}
+    html[data-theme="dark"]{color-scheme:dark}
+    .warn-text{color:var(--bad);font-weight:600}
+
+    /* ---------- avisos ao vivo ----------
+       Três camadas: ponto no menu, título a piscar e uma faixa que
+       desliza. A primeira serve quem está a olhar, a segunda quem
+       tem o painel noutra aba, a terceira quem está ao telefone. */
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--warn);
+      display:inline-block;flex:0 0 auto;margin-left:auto;
+      box-shadow:0 0 0 0 rgba(245,180,87,.6);animation:ping 2s ease-out infinite}
+    @keyframes ping{
+      0%{box-shadow:0 0 0 0 rgba(245,180,87,.55)}
+      70%{box-shadow:0 0 0 7px rgba(245,180,87,0)}
+      100%{box-shadow:0 0 0 0 rgba(245,180,87,0)}
+    }
+    .toasts{position:fixed;right:18px;bottom:18px;z-index:900;display:flex;
+      flex-direction:column;gap:9px;max-width:340px}
+    .toast{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--warn);
+      border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);
+      animation:toastIn .32s cubic-bezier(.22,.68,.35,1)}
+    @keyframes toastIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+    .toast .t{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--warn);margin-bottom:5px}
+    .toast .m{font-size:13.5px;line-height:1.5;margin-bottom:9px}
+    .toast .go{border:0;background:var(--primary);color:#fff;border-radius:8px;
+      padding:6px 12px;font-family:var(--mono);font-size:10.5px;font-weight:600;
+      letter-spacing:.07em;text-transform:uppercase;cursor:pointer}
+    .toast .x{position:absolute;top:8px;right:10px;border:0;background:none;
+      color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+
+    .head-btn{width:36px;height:36px;border-radius:9px;border:1px solid var(--border);
+      background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;
+      align-items:center;justify-content:center}
+    .head-btn:hover{color:var(--text);border-color:var(--primary)}
+    .head-btn.off{opacity:.45}
+    .head-btn svg{width:16px;height:16px}
+    *{box-sizing:border-box}
+    /* Sem 100vh: dentro de um iframe, 100vh é a altura da janela e
+       não do iframe. A altura é reportada ao Wix. */
+    html,body{margin:0;background:var(--bg);color:var(--text);
+      font-family:var(--body);-webkit-font-smoothing:antialiased}
+    h1,h2,h3,h4{font-family:var(--display);letter-spacing:-.02em}
+    .container{max-width:100%;margin:0;padding:0}
+
+    /* barra de topo fixa, como num painel de operações */
+    .header{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;
+      align-items:center;gap:16px;flex-wrap:wrap;padding:0 24px;height:62px;
+      background:var(--card);border-bottom:1px solid var(--border)}
+    .header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;
+      display:flex;align-items:center;gap:11px}
+    .header h1::before{content:"";width:9px;height:9px;border-radius:999px;
+      background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+    .who{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
+
+    /* navegação lateral: numa consola usada o dia todo, um menu
+       vertical mostra tudo de uma vez e não rebenta para segunda
+       linha quando as secções crescem. */
+    .body-wrap{display:grid;grid-template-columns:216px minmax(0,1fr);
+      min-height:calc(100vh - 62px)}
+    .tabs{display:flex;flex-direction:column;gap:3px;padding:16px 12px;
+      background:var(--card);border-right:1px solid var(--border);
+      position:sticky;top:62px;height:calc(100vh - 62px);overflow-y:auto}
+    .tab-group{font-family:var(--mono);font-size:9px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--muted);opacity:.65;padding:16px 12px 7px}
+    .tab-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+      padding:10px 12px;border:0;border-radius:9px;background:transparent;color:var(--muted);
+      cursor:pointer;font-weight:500;font-size:14px;
+      transition:background .15s ease,color .15s ease}
+    .tab-btn:hover{background:var(--card-2);color:var(--text)}
+    .tab-btn.active{background:var(--card-2);color:var(--text);font-weight:600;
+      box-shadow:inset 2px 0 0 var(--primary)}
+    .tab-btn span{margin-left:auto;font-family:var(--mono);font-size:11px;
+      font-weight:600;color:var(--warn)}
+    .content{padding:24px;min-width:0}
+    @media (max-width:900px){
+      .body-wrap{grid-template-columns:1fr}
+      .tabs{position:static;height:auto;flex-direction:row;flex-wrap:wrap;
+        border-right:0;border-bottom:1px solid var(--border)}
+      .tab-group{display:none}
+      .tab-btn{width:auto}
+      .content{padding:16px}
+    }
+    .panel{display:none}
+    .panel.active{display:block}
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+    .stat-card{background:var(--card);border:1px solid var(--border-soft);border-radius:var(--radius);
+      padding:16px 18px;position:relative;overflow:hidden}
+    .stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary)}
+    .stat-card h3{margin:0 0 10px;font-family:var(--mono);font-size:10px;font-weight:600;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .stat-card .value{margin:0;font-family:var(--mono);font-size:27px;font-weight:600;
+      letter-spacing:-.02em;color:var(--text);font-variant-numeric:tabular-nums}
+    .search-section{background:var(--card);border:1px solid var(--border-soft);
+      border-radius:var(--radius);padding:18px 20px;margin-bottom:18px}
+    .search-section h2{margin:0 0 14px;font-size:15px;font-weight:700;letter-spacing:-.01em;
+      display:flex;align-items:center;gap:9px}
+    .search-section h2::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--primary)}
+    .search-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+    .search-input{padding:10px 13px;border:1px solid var(--border);border-radius:10px;
+      background:var(--bg);color:var(--text);font-size:13.5px;outline:none;width:100%;
+      transition:border-color .15s ease}
+    .search-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+    .search-input::placeholder{color:#5B6A82}
+    .search-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+    .search-btn,.clear-btn,.export-btn,.refresh-btn,.btn-danger{padding:10px 16px;border:0;
+      border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;
+      transition:transform .1s ease,opacity .15s ease}
+    .search-btn:hover,.clear-btn:hover,.export-btn:hover,.refresh-btn:hover{transform:translateY(-1px)}
+    .search-btn,.refresh-btn{background:var(--primary);color:#fff}
+    .clear-btn{background:transparent;color:var(--muted);border:1px solid var(--border)}
+    .btn-danger{background:transparent;color:var(--bad);border:1px solid rgba(248,113,113,.3)}
+    .export-btn{background:transparent;color:var(--ok);border:1px solid rgba(52,211,153,.3)}
+    .table-box{background:var(--card);border:1px solid var(--border-soft);
+      border-radius:var(--radius);overflow:hidden}
+    .table-scroll{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;min-width:800px}
+    th{padding:11px 15px;text-align:left;border-bottom:1px solid var(--border);
+      background:var(--card-2);font-family:var(--mono);font-size:10px;font-weight:600;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--muted);position:sticky;top:0}
+    td{padding:13px 15px;border-bottom:1px solid var(--border-soft);vertical-align:top;font-size:13.5px}
+    tbody tr{transition:background .12s ease}
+    tbody tr:hover{background:var(--card-2)}
+    tbody tr:last-child td{border-bottom:0}
+    /* Estados em contorno, não em blocos de cor sólida: numa tabela
+       com trinta linhas, trinta manchas fortes tornam-se ruído. */
+    .status{padding:4px 9px;border-radius:6px;font-family:var(--mono);font-size:10px;
+      font-weight:600;letter-spacing:.06em;text-transform:uppercase;display:inline-block;
+      border:1px solid transparent}
+    .status.pending,.status.open,.status.partially_refunded,.status.submitted,
+    .status.in_review,.status.draft{background:var(--warn-bg);color:var(--warn);border-color:rgba(245,180,87,.28)}
+    .status.completed,.status.paid,.status.resolved{background:var(--ok-bg);color:var(--ok);border-color:rgba(52,211,153,.28)}
+    .status.cancelled,.status.refunded,.status.suspended{background:var(--bad-bg);color:var(--bad);border-color:rgba(248,113,113,.28)}
+    .status.verified{background:var(--primary-soft);color:var(--primary);border-color:rgba(79,142,247,.3)}
+    .btn{border:0;border-radius:9px;padding:8px 14px;font-weight:600;cursor:pointer;
+      font-size:12.5px;background:var(--primary);color:#fff;transition:opacity .15s ease}
+    .btn:hover{opacity:.88}
+    .btn-small{padding:6px 12px;font-size:11.5px}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .modal{position:fixed;inset:0;background:rgba(6,10,18,.82);display:flex;
+      align-items:center;justify-content:center;z-index:1000;padding:16px}
+    .modal-content{background:var(--card);border:1px solid var(--border);border-radius:18px;
+      padding:24px;max-width:1000px;width:100%;max-height:88vh;overflow-y:auto;
+      box-shadow:0 40px 90px rgba(0,0,0,.6)}
+    .hidden{display:none!important}
+    .no-results{text-align:center;padding:36px;color:var(--muted)}
+    .pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:20px;flex-wrap:wrap}
+    .pagination-btn{padding:8px 15px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer;font-size:14px}
+    .pagination-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .pagination-info{color:var(--muted);font-size:14px}
+    .per-page{display:flex;align-items:center;gap:8px;color:var(--muted);padding:14px 15px 0}
+    .per-page select{padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .detail-label{font-size:12px;color:var(--muted);margin-bottom:4px}
+    .detail-value{font-size:15px;font-weight:600;word-break:break-word;margin-bottom:12px}
+    .detail-full{grid-column:1/-1}
+    .loading-row,.error-row{padding:22px;text-align:center;color:var(--muted)}
+    a.receipt-link{color:var(--primary);text-decoration:none;font-weight:700}
+    .support-layout{display:flex;gap:14px}
+    .conv-list-box{width:330px;flex:0 0 330px;background:var(--card);border:1px solid var(--border);border-radius:15px;display:flex;flex-direction:column;overflow:hidden}
+    .conv-list-head{padding:15px;border-bottom:1px solid var(--border);font-weight:800}
+    .conv-list-scroll{max-height:620px;overflow-y:auto;padding:10px}
+    .conv-item{padding:11px 13px;border-radius:11px;cursor:pointer;margin-bottom:8px;background:var(--card-2);border:1px solid transparent}
+    .conv-item:hover{background:var(--card-2)}
+    .conv-item.active{border-color:var(--primary);background:var(--card-2)}
+    .conv-item-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px}
+    .conv-item-subject{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+    .conv-item-email,.conv-item-snippet{font-size:12px;color:var(--muted);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .conv-item-time{font-size:11px;color:var(--muted)}
+    .conv-thread-box{flex:1;background:var(--card);border:1px solid var(--border);border-radius:15px;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+    .conv-thread-head{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .conv-thread-empty{display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:60px 30px;min-height:400px}
+    .conv-messages{height:440px;overflow-y:auto;padding:18px;display:flex;flex-direction:column}
+    .conv-msg{max-width:72%;padding:11px 14px;border-radius:15px;font-size:14px;line-height:1.5;margin-bottom:11px;white-space:pre-wrap;word-wrap:break-word}
+    .conv-msg.admin{margin-left:auto;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+    .conv-msg.customer{margin-right:auto;background:var(--card-2);border:1px solid var(--border);border-bottom-left-radius:4px}
+    .conv-msg-meta{font-size:10.5px;margin-top:5px;opacity:.75}
+    .conv-attachment{margin-top:8px;padding:8px 12px;background:rgba(255,255,255,.18);border-radius:10px;font-size:12.5px;color:inherit;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:0;font-family:inherit;text-align:left;max-width:100%}
+    .conv-msg.customer .conv-attachment{background:rgba(255,255,255,.10)}
+    .conv-attachment:hover{text-decoration:underline}
+    .conv-note{padding:9px 15px;text-align:center;font-size:12.5px;color:var(--muted);background:var(--card-2);border-top:1px solid var(--border)}
+    .conv-note.error{color:#fecaca;background:#7f1d1d;font-weight:700}
+    .conv-reply-row{border-top:1px solid var(--border);padding:13px 15px;display:flex;gap:10px;align-items:flex-end}
+    .conv-reply-row textarea{flex:1;resize:none;max-height:120px;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none}
+    .status-toggle-btn,.attach-btn{background:var(--card-2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 13px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap}
+    .attach-btn:disabled{opacity:.4;cursor:not-allowed}
+    .file-chip{display:none;align-items:center;gap:8px;background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:6px 8px 6px 11px;font-size:12px;max-width:250px}
+    .file-chip.show{display:inline-flex}
+    .file-chip .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .file-chip .remove{border:0;background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;padding:0 4px;font-weight:700}
+    .file-chip .remove:hover{color:#fca5a5}
+    .modal-tabs{display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px}
+    .modal-tab{padding:8px 15px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer;font-weight:700;font-size:13px}
+    .modal-tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+    .modal-tab-content{display:none}
+    .modal-tab-content.active{display:block}
+    .gate{display:flex;align-items:center;justify-content:center;padding:60px 24px;min-height:520px}
+    .gate-card{width:100%;max-width:390px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:30px}
+    .gate-card h1{margin:0 0 6px;font-size:23px}
+    .gate-card p{margin:0 0 20px;color:var(--muted);font-size:14px;line-height:1.5}
+    .gate-field{margin-bottom:13px}
+    .gate-field label{display:block;margin-bottom:7px;font-size:13px;font-weight:700;color:var(--muted)}
+    .gate-field input{width:100%;padding:12px 13px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;outline:none}
+    .gate-msg{display:none;margin-top:13px;padding:11px 13px;border-radius:10px;font-size:14px;background:#7f1d1d;color:#fecaca;border:1px solid #991b1b;line-height:1.45}
+    .gate-btn{width:100%;margin-top:8px;padding:12px;border:0;border-radius:10px;background:var(--primary);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+    .gate-btn:disabled{opacity:.6;cursor:not-allowed}
+    .agent-card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:18px;margin-bottom:12px}
+    .agent-card.pending{border-color:#f59e0b}
+    .agent-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}
+    .agent-head h3{margin:0 0 4px;font-size:17px}
+    .agent-head .who{font-size:12.5px;color:var(--muted);line-height:1.6}
+    .agent-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+    .agent-fact{background:var(--card-2);border:1px solid var(--border);border-radius:11px;padding:10px 12px}
+    .agent-fact .k{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+    .agent-fact .v{font-size:13.5px;font-weight:700;word-break:break-word}
+    .agent-note-box{background:var(--card-2);border:1px solid var(--border);border-radius:11px;padding:12px 14px;font-size:13.5px;line-height:1.6;margin-bottom:12px;white-space:pre-wrap}
+    .agent-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .agent-actions input{width:90px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:14px}
+    .btn-ok{background:#10b981;color:#fff;border:0;border-radius:9px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer}
+    .btn-no{background:transparent;color:#fca5a5;border:1px solid #7f1d1d;border-radius:9px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer}
+    a.agent-link{color:var(--primary);text-decoration:none;font-weight:700}
+    .chg-card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:16px 18px;margin-bottom:10px}
+    .chg-card.late{border-color:#f59e0b}
+    .chg-card.failed{border-color:#7f1d1d}
+    .chg-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px}
+    .chg-top h4{margin:0 0 3px;font-size:15.5px}
+    .chg-top .m{font-size:12px;color:var(--muted);line-height:1.6}
+    .chg-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+    .chg-fact{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px}
+    .chg-fact .k{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+    .chg-fact .v{font-size:13px;font-weight:700}
+    .chg-err{margin-top:10px;padding:9px 12px;border-radius:9px;background:#2b1114;color:#fca5a5;font-size:12.5px;line-height:1.5}
+    .chg-actions{display:flex;gap:9px;margin-top:11px;flex-wrap:wrap}
+    .btn-charge{background:#10b981;color:#fff;border:0;border-radius:9px;padding:9px 15px;font-weight:700;font-size:12.5px;cursor:pointer}
+    .btn-charge:disabled{opacity:.5;cursor:not-allowed}
+    .stat-sub{margin:7px 0 0;font-size:11.5px;color:var(--muted);line-height:1.4}
+    .fin-periods{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+    .fin-period{padding:8px 14px;border:1px solid var(--border);border-radius:999px;
+      background:transparent;color:var(--muted);cursor:pointer;font-size:13px}
+    .fin-period:hover{color:var(--text)}
+    .fin-period.active{background:var(--primary);color:#fff;border-color:transparent;font-weight:600}
+
+    .fin-chart-box{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:20px;margin-bottom:18px}
+    .fin-chart-head{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+    .fin-chart-head h3{margin:0 0 5px;font-family:var(--display);font-weight:700;font-size:16px;
+      letter-spacing:-.02em}
+    .fin-chart-head p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5;max-width:52ch}
+    .fin-legend{display:flex;gap:16px;font-size:12px;color:var(--muted);align-items:flex-start}
+    .fin-legend span{display:inline-flex;align-items:center;gap:7px}
+    .fin-legend .sw{width:12px;height:12px;border-radius:4px}
+    .fin-legend .sw.net{background:var(--primary)}
+    .fin-legend .sw.margin{background:var(--ok)}
+    .fin-chart{display:flex;align-items:flex-end;gap:10px;height:180px;padding-top:10px}
+    .fin-bar{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;
+      align-items:center;gap:7px;height:100%}
+    .fin-bar .stack{width:100%;background:var(--primary);border-radius:6px 6px 0 0;
+      position:relative;min-height:2px;transition:height .4s ease}
+    .fin-bar .stack i{position:absolute;left:0;right:0;bottom:0;background:var(--ok);
+      border-radius:0 0 6px 6px}
+    .fin-bar .lbl{font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap}
+    .fin-bar .amt{font-family:var(--mono);font-size:10.5px;font-weight:600}
+    .fin-bar.empty .stack{background:var(--card-2)}
+
+    .fin-tabs{display:flex;gap:2px;padding:3px;background:var(--card);border:1px solid var(--border);
+      border-radius:12px;margin-bottom:14px;flex-wrap:wrap}
+    .fin-tab{padding:9px 15px;border:0;border-radius:9px;background:transparent;color:var(--muted);
+      cursor:pointer;font-size:13.5px;font-weight:600}
+    .fin-tab:hover{color:var(--text)}
+    .fin-tab.active{background:var(--card-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--border)}
+    .num-cell{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+    .pos{color:var(--ok)}
+    .neg{color:var(--bad)}
+    /* Vistas rápidas: o que interessa hoje, sem escrever nada. Uma
+       tabela ordenada por data de viagem enterra a reserva feita há
+       cinco minutos no meio de tudo. */
+    /* ---------- posto de atendimento ---------- */
+    .desk{display:grid;grid-template-columns:320px 1fr;gap:16px;height:calc(100vh - 250px);min-height:520px}
+    /* A conversa e o contexto lado a lado. Responder obrigava a
+       abrir outro separador para saber quem é a empresa e o que tem
+       em aberto — e a voltar. */
+    .desk-split{flex:1;display:grid;grid-template-columns:1fr 262px;min-height:0}
+    .desk-ctx{border-left:1px solid var(--border);overflow-y:auto;padding:16px;
+      background:var(--card-2);min-height:0}
+    .ctx-h{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--muted);margin:18px 0 9px}
+    .ctx-h:first-child{margin-top:0}
+    .ctx-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;
+      padding:6px 0;font-size:12.5px;border-bottom:1px solid var(--border)}
+    .ctx-row:last-child{border-bottom:0}
+    .ctx-row span:first-child{color:var(--muted);flex:0 0 auto}
+    .ctx-row span:last-child,.ctx-row button{text-align:right;font-weight:600;min-width:0;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ctx-row .bad{color:var(--bad)}
+    .ctx-row .ok{color:var(--ok)}
+    .ctx-big{background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:12px 14px;margin-bottom:10px}
+    .ctx-big .k{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+    .ctx-big .v{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.02em}
+    .ctx-ride{background:var(--card);border:1px solid var(--border);border-radius:11px;
+      padding:10px 12px;margin-bottom:7px;font-size:12px;line-height:1.5}
+    .ctx-ride b{display:block;font-family:var(--mono);font-size:11px;margin-bottom:3px}
+    .ctx-ride span{color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;
+      white-space:nowrap}
+    .ctx-copy{background:transparent;border:0;padding:0;color:var(--primary);cursor:pointer;
+      font:inherit}
+    .ctx-copy:hover{text-decoration:underline}
+    @media (max-width:1300px){.desk-split{grid-template-columns:1fr}.desk-ctx{display:none}}
+    .desk-left{display:flex;flex-direction:column;gap:12px;min-height:0}
+    .desk-status{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+    /* Barra do posto: o estado à vista de qualquer separador, como
+       num call centre a sério. Quem está a atender não deve ter de
+       procurar onde se marca como presente. */
+    /* Um ponto que pisca em cada separador com trabalho à espera.
+       Só onde há acção: se tudo piscasse, nada chamaria a atenção. */
+    .tab-btn .dot{display:inline-block;width:8px;height:8px;border-radius:999px;
+      background:var(--warn);margin-left:7px;vertical-align:middle;
+      animation:tabPulse 1.5s ease-in-out infinite}
+    .tab-btn .dot.hot{background:var(--bad)}
+    @keyframes tabPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.8)}}
+    .tab-btn .count{display:inline-block;min-width:19px;padding:1px 6px;margin-left:7px;
+      border-radius:999px;background:var(--warn);color:#241703;
+      font-family:var(--mono);font-size:10px;font-weight:600;vertical-align:middle}
+    .tab-btn .count.hot{background:var(--bad);color:#fff}
+
+    .deskbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+      padding:10px 20px;background:var(--card);border-bottom:1px solid var(--border);
+      position:sticky;top:0;z-index:40}
+    .deskbar .states{margin-bottom:0;flex:0 0 auto}
+    .deskbar-label{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--muted);flex:0 0 auto}
+    /* Ficaste offline porque não atendeste. Dizê-lo é o que impede
+       alguém de passar uma hora sem perceber que parou de receber. */
+    .went-off{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+      padding:11px 20px;background:var(--bad-bg);border-bottom:1px solid var(--bad);
+      color:var(--bad);font-size:13.5px;line-height:1.5}
+    .went-off strong{font-weight:700}
+    .went-off button{margin-left:auto;border:1px solid var(--bad);background:transparent;
+      border-radius:10px;padding:7px 15px;color:var(--bad);font-size:12.5px;
+      font-weight:600;cursor:pointer;flex:0 0 auto}
+    .went-off button.back{background:var(--ok);border-color:transparent;color:#04231A}
+    .deskbar-mine{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+    /* O nome que o parceiro lê. Sem ele, responde "Airportlink" — e
+       falar com uma pessoa é diferente de falar com uma marca. */
+    .deskbar-name{display:inline-flex;align-items:center;gap:8px;background:transparent;
+      border:1px solid var(--border);border-radius:999px;padding:6px 14px;
+      color:var(--muted);font-size:12.5px;cursor:pointer;flex:0 0 auto}
+    .deskbar-name:hover{color:var(--text);border-color:var(--primary)}
+    .deskbar-name svg{width:14px;height:14px}
+    .deskbar-name.unset{color:var(--warn);border-color:var(--warn)}
+    .deskbar-locked{margin-left:auto;display:inline-flex;align-items:center;gap:8px;
+      background:var(--bad-bg);border:1px solid var(--bad);border-radius:999px;
+      padding:7px 14px;color:var(--bad);font-size:12.5px;font-weight:600;cursor:pointer}
+    .deskbar-locked svg{width:15px;height:15px}
+    .deskbar-locked.hidden + .deskbar-test{margin-left:auto}
+    .deskbar-test{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);
+      background:transparent;color:var(--muted);cursor:pointer;display:flex;
+      align-items:center;justify-content:center;flex:0 0 auto}
+    .deskbar-test:hover{color:var(--text);border-color:var(--primary)}
+    .deskbar-test svg{width:16px;height:16px}
+    .deskbar-alert{display:inline-flex;align-items:center;gap:9px;background:var(--warn-bg);
+      border:1px solid var(--warn);border-radius:999px;padding:7px 15px 7px 12px;
+      color:var(--warn);cursor:pointer;font-size:13px;font-weight:600;
+      animation:waiting 1.6s ease-in-out infinite}
+    .deskbar-alert svg{width:16px;height:16px}
+    @keyframes waiting{0%,100%{opacity:1}50%{opacity:.55}}
+
+    /* Três estados, não um interruptor. Quem vai almoçar não fica
+       offline — fica em pausa, e a diferença importa para quem
+       espera do outro lado. */
+    .states{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+      background:var(--card-2);padding:4px;border-radius:12px;margin-bottom:11px}
+    .st{display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 6px;
+      border:0;border-radius:9px;background:transparent;color:var(--muted);cursor:pointer;
+      font-size:12.5px;font-weight:600}
+    .st .dot{width:8px;height:8px;border-radius:999px;background:currentColor;opacity:.45}
+    .st:hover{color:var(--text)}
+    /* O estado escolhido tem de se ver do outro lado da sala. Antes
+       era uma mudança de cor do texto sobre fundo igual — bastava
+       olhar de lado para não saber se se estava ao serviço. Agora o
+       botão ativo enche-se de cor e o inativo apaga-se. */
+    .st.active{color:#fff;font-weight:700;box-shadow:none;
+      transform:translateY(-1px)}
+    .st.live.active{background:var(--ok);
+      box-shadow:0 2px 10px -2px var(--ok),0 0 0 1px var(--ok)}
+    .st.brk.active{background:var(--warn);color:#3A2405;
+      box-shadow:0 2px 10px -2px var(--warn),0 0 0 1px var(--warn)}
+    .st.off.active{background:var(--muted);
+      box-shadow:0 0 0 1px var(--muted)}
+    .st:not(.active){opacity:.5}
+    .st:not(.active):hover{opacity:1}
+    .st.active .dot{opacity:1;background:currentColor;
+      box-shadow:0 0 0 3px rgba(255,255,255,.28)}
+    .st.live.active .dot{animation:pulse 1.8s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}
+      50%{opacity:.45;transform:scale(.82)}}
+
+    /* E uma barra fina no topo da página, da cor do estado. É o
+       sinal que se apanha sem olhar para nada em concreto. */
+    /* Enquanto o som estiver bloqueado, o aviso pulsa. Um agente que
+       não repare nisto perde chamadas e não percebe porquê. */
+    body.sound-locked .deskbar-locked{animation:sndPulse 1.6s ease-in-out infinite;
+      background:var(--warn-bg,#FDF6E7);color:var(--warn,#8A5A12);
+      box-shadow:0 0 0 1px var(--warn,#8A5A12)}
+    @keyframes sndPulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* O aviso de demora. Três estados, cada um mais insistente: aos
+       três minutos avisa, aos cinco insiste, aos dez já foi escalado
+       e diz-se isso — o agente tem de saber que o supervisor sabe. */
+/* ---------- caixas de diálogo ---------- */
+    .ask-back{position:fixed;inset:0;z-index:200;background:rgba(10,14,22,.55);
+      display:flex;align-items:center;justify-content:center;padding:20px}
+    .ask-back[hidden]{display:none !important}
+    .ask{background:var(--card);border-radius:16px;padding:24px;max-width:420px;width:100%;
+      box-shadow:0 24px 60px -12px rgba(0,0,0,.4)}
+    .ask h3{margin:0 0 10px;font-size:17px}
+    .ask p{margin:0 0 18px;font-size:14px;line-height:1.6;color:var(--muted);
+      white-space:pre-line}
+    .ask input{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:10px;
+      background:var(--bg);color:var(--text);font-family:inherit;font-size:15px;
+      margin-bottom:18px}
+    .ask input[hidden]{display:none}
+    .ask input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+    .ask-btns{display:flex;gap:10px;justify-content:flex-end}
+
+/* ---------- histórico ---------- */
+    /* O painel é absoluto, por isso o contentor que o segura tem de
+       ser o ponto de referência. Sem isto encostava ao canto da
+       janela em vez de cobrir a conversa. */
+    .desk-right{position:relative}
+    /* O [hidden] tem de ganhar ao display:flex. Sem esta regra o
+       painel fica sempre visível a tapar a conversa — o atributo
+       hidden vale display:none, e qualquer display declarado a
+       seguir sobrepõe-se-lhe. */
+    .hist-panel[hidden],.hist-read[hidden],.snips[hidden],
+    .reply-warn[hidden],.chat-clock[hidden]{display:none !important}
+    .hist-panel{position:absolute;inset:0;background:var(--card);z-index:5;
+      display:flex;flex-direction:column;border-radius:inherit}
+    .hist-head{display:flex;align-items:center;justify-content:space-between;gap:14px;
+      padding:16px 20px;border-bottom:1px solid var(--border)}
+    .hist-head strong{display:block;font-size:15px}
+    .hist-head span{font-size:12px;color:var(--muted)}
+    .hist-list{flex:1;overflow:auto;padding:8px}
+    .hist-item{display:block;width:100%;text-align:left;padding:13px 14px;border:0;
+      border-radius:10px;background:transparent;cursor:pointer;font-family:inherit;
+      border-bottom:1px solid var(--border)}
+    .hist-item:hover{background:var(--bg)}
+    .hist-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+    .hist-subj{font-size:14px;font-weight:600;color:var(--text)}
+    .hist-when{font-size:11.5px;color:var(--muted);flex:0 0 auto}
+    .hist-snip{margin:5px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .hist-tags{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+    .hist-read{position:absolute;inset:0;background:var(--card);display:flex;
+      flex-direction:column;border-radius:inherit;z-index:6}
+    .hist-read>button{margin:14px 20px 0;align-self:flex-start}
+    .hist-thread{flex:1;overflow:auto;padding:14px 20px 20px}
+
+    /* ---------- respostas rápidas ---------- */
+    .snips{max-height:230px;overflow:auto;border-top:1px solid var(--border);
+      background:var(--bg)}
+    .snip{display:block;width:100%;text-align:left;padding:11px 18px;border:0;
+      background:transparent;cursor:pointer;font-family:inherit;
+      border-bottom:1px solid var(--border)}
+    .snip:hover,.snip.on{background:var(--card)}
+    .snip-top{display:flex;align-items:baseline;gap:10px}
+    .snip-key{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent)}
+    .snip-lab{font-size:13px;font-weight:600;color:var(--text)}
+    .snip-body{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.45;
+      display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+    .snip-none{padding:14px 18px;font-size:12.5px;color:var(--muted)}
+
+    .reply-warn{display:flex;align-items:center;gap:8px;padding:7px 14px;
+      border-radius:999px;font-size:13px;font-weight:600;margin-left:auto}
+    .reply-warn::before{content:"";width:7px;height:7px;border-radius:999px;
+      background:currentColor;animation:pulse 1.5s ease-in-out infinite}
+    .reply-warn.w1{background:var(--warn-bg,#FDF6E7);color:var(--warn,#8A5A12)}
+    .reply-warn.w2{background:var(--bad-bg,#FFF1F2);color:var(--bad,#B42318)}
+    .reply-warn.w3{background:var(--bad,#B42318);color:#fff}
+
+    /* Na lista, a conversa que espera demasiado sobe à vista. */
+    .chat-row.late{box-shadow:inset 3px 0 0 var(--bad,#B42318)}
+    .tag.late{background:var(--bad,#B42318);color:#fff;border-color:transparent}
+
+    /* Enquanto não se sabe, a barra fica neutra e a pulsar devagar.
+       Um cinzento parado leria-se como "offline", que é uma
+       afirmação que ainda não podemos fazer. */
+    body[data-duty="unknown"] .duty-bar{background:var(--border);
+      animation:dutyWarn 2s ease-in-out infinite}
+    body[data-duty="unknown"] .st{opacity:.35;pointer-events:none}
+
+    .duty-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;
+      background:var(--muted);transition:background .25s}
+    body[data-duty="live"] .duty-bar{background:var(--ok)}
+    body[data-duty="break"] .duty-bar{background:var(--warn)}
+    body[data-duty="offline"] .duty-bar{background:var(--bad)}
+    /* Offline com conversas à espera é o caso que não pode passar
+       despercebido. */
+    body[data-duty="offline"].has-waiting .duty-bar{
+      animation:dutyWarn 1.4s ease-in-out infinite}
+    @keyframes dutyWarn{0%,100%{opacity:1}50%{opacity:.3}}
+    .state-note{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.5}
+    .desk-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .desk-figs > div{background:var(--card-2);border-radius:10px;padding:9px 11px}
+    .desk-figs .k{display:block;font-family:var(--mono);font-size:8.5px;font-weight:600;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+    .desk-figs .v{display:block;font-family:var(--mono);font-size:16px;font-weight:600}
+    .desk-list{flex:1;overflow-y:auto;background:var(--card);border:1px solid var(--border);
+      border-radius:14px;padding:8px;min-height:0}
+    .chat-row{width:100%;text-align:left;background:transparent;border:1px solid transparent;
+      border-radius:11px;padding:12px 13px;cursor:pointer;margin-bottom:5px;color:var(--text)}
+    .chat-row:hover{background:var(--card-2)}
+    .chat-row.active{background:var(--primary-soft);border-color:var(--primary)}
+    .chat-row.mine{border-left:3px solid var(--ok)}
+    .chat-row.urgent{border-left:3px solid var(--bad)}
+    .chat-row .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:5px}
+    .chat-row .nm{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .chat-row .ago{font-family:var(--mono);font-size:10px;color:var(--muted);flex:0 0 auto}
+    .chat-row .snip{font-size:12.5px;color:var(--muted);line-height:1.45;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .chat-row .tags{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+    .chat-row .tag{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.08em;
+      text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--border);
+      color:var(--muted)}
+    .chat-row .tag.new{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+    .chat-row .tag.wait{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+    .chat-row .tag.mine{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+
+    .desk-right{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      overflow:hidden;min-height:0}
+    .desk-blank{height:100%;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;text-align:center;padding:40px;gap:9px}
+    .desk-blank strong{font-size:16px}
+    .desk-blank span{color:var(--muted);font-size:13.5px;line-height:1.6;max-width:38ch}
+    .desk-head{display:flex;justify-content:space-between;gap:14px;align-items:center;
+      padding:15px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;flex:0 0 auto}
+    .desk-head strong{display:block;font-size:15px;margin-bottom:3px}
+    .desk-head span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+    .desk-actions{display:flex;gap:7px;flex-wrap:wrap}
+    /* Ler sem pegar é o normal. Pegar é uma decisão, e uma decisão
+       precisa de um botão. */
+    .desk-claim{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+      padding:12px 18px;background:var(--warn-bg);border-bottom:1px solid var(--warn);
+      color:var(--warn);font-size:13px;line-height:1.5;flex:0 0 auto}
+    .claim-btn{margin-left:auto;border:0;border-radius:11px;background:var(--ok);
+      color:#04231A;font-size:13px;font-weight:700;padding:9px 18px;cursor:pointer;flex:0 0 auto}
+    .claim-btn:disabled{opacity:.5;cursor:not-allowed}
+    .desk-foot.locked,.desk-mode.locked{opacity:.45;pointer-events:none}
+    .chat-row .tag.busy{background:var(--primary-soft);color:var(--primary);border-color:transparent}
+    .desk-body{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:0;min-height:0}
+    /* Quem deixou passar esta conversa, e quanto tempo demorou. */
+    .desk-log{flex:0 0 auto;padding:12px 18px;border-top:1px solid var(--border);
+      background:var(--card-2);font-family:var(--mono);font-size:10.5px;color:var(--muted);
+      line-height:1.7;max-height:96px;overflow-y:auto}
+    .desk-log b{color:var(--text);font-weight:600}
+    .desk-log .miss{color:var(--warn)}
+    .desk-log .took{color:var(--ok)}
+    /* Responder ou anotar. Duas caixas separadas seria pior: a nota
+       escreve-se a meio de uma conversa, no mesmo sítio. */
+    .desk-mode{display:flex;align-items:center;gap:6px;padding:12px 16px 0;flex:0 0 auto}
+    .dm{border:1px solid var(--border);background:transparent;border-radius:999px;
+      padding:6px 14px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
+    .dm:hover{color:var(--text)}
+    .dm.active{background:var(--primary-soft);color:var(--primary);border-color:var(--primary)}
+    .dm[data-mode="note"].active{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+    .dm-clip{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--border);
+      background:transparent;color:var(--muted);cursor:pointer;display:flex;
+      align-items:center;justify-content:center}
+    .dm-clip:hover{color:var(--primary);border-color:var(--primary)}
+    .dm-clip svg{width:15px;height:15px}
+    .desk-foot.note textarea{border-color:var(--warn);background:var(--warn-bg)}
+
+    /* Notas internas: amarelas, ao centro, sem lado. Não são de
+       ninguém para ninguém — são sobre a conversa. */
+    .d-note{align-self:center;max-width:88%;background:var(--warn-bg);
+      border:1px dashed var(--warn);border-radius:12px;padding:10px 14px;margin:10px 0;
+      font-size:13px;line-height:1.55;color:var(--warn)}
+    .d-note .who{display:block;font-family:var(--mono);font-size:9px;font-weight:600;
+      letter-spacing:.12em;text-transform:uppercase;opacity:.8;margin-bottom:5px}
+    .d-note.sys{border-style:solid;background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+    .d-file{display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
+    .d-file svg{width:17px;height:17px;flex:0 0 auto;opacity:.8}
+    .desk-foot{display:flex;gap:9px;padding:14px 16px;border-top:1px solid var(--border);flex:0 0 auto}
+    .desk-foot textarea{flex:1;resize:none;max-height:120px;padding:11px 13px;
+      border:1px solid var(--border);border-radius:11px;background:var(--bg);color:var(--text);
+      font-family:inherit;font-size:14px;line-height:1.5;outline:none}
+    .desk-foot textarea:focus{border-color:var(--primary)}
+    /* O filho do flex encolhia até à largura da letra mais larga e o
+       texto saía uma letra por linha. A largura máxima passa para o
+       contentor, e o filho leva min-width:0. */
+    .d-row{display:flex}
+    .d-row.mine{justify-content:flex-end}
+    .d-row > div{max-width:76%;min-width:0}
+    .d-row.mine > div{margin-left:auto}
+    .d-row + .d-row{margin-top:3px}
+    .d-row.turn{margin-top:14px}
+    .d-bub{max-width:100%;width:fit-content;padding:11px 15px;border-radius:18px;
+      font-size:14.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+    .d-row.mine .d-bub{background:var(--primary);color:#fff;margin-left:auto;
+      border-bottom-right-radius:6px}
+    .d-row.theirs .d-bub{background:var(--card-2);border:1px solid var(--border);
+      border-bottom-left-radius:6px}
+    .d-row.mine:not(.last) .d-bub{border-bottom-right-radius:18px}
+    .d-row.theirs:not(.last) .d-bub{border-bottom-left-radius:18px}
+    .d-meta{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin:5px 2px 0}
+    .d-row.mine .d-meta{text-align:right}
+    .d-day{display:flex;align-items:center;gap:12px;margin:18px 0 10px;
+      font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--muted)}
+    .d-day::before,.d-day::after{content:"";flex:1;height:1px;background:var(--border)}
+
+    /* ---------- chamada a entrar ----------
+       Como num call centre: um destinatário, um relógio, e uma
+       decisão. Com a oferta aberta a todos ninguém se sente
+       responsável — cada um assume que outro pega. */
+    .ring{position:fixed;right:24px;bottom:24px;width:min(360px,calc(100vw - 32px));
+      background:var(--card);border:1px solid var(--warn);border-radius:20px;
+      box-shadow:0 26px 60px rgba(0,0,0,.4);z-index:200;overflow:hidden;
+      animation:ringIn .3s cubic-bezier(.22,1.2,.36,1)}
+    @keyframes ringIn{from{opacity:0;transform:translateY(18px) scale(.95)}to{opacity:1;transform:none}}
+    .ring-bar{height:4px;background:var(--warn-bg)}
+    .ring-bar i{display:block;height:100%;background:var(--warn);width:100%;
+      transition:width 1s linear}
+    .ring-body{padding:20px}
+    .ring-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);
+      font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+      color:var(--warn);margin-bottom:12px}
+    .ring-tag i{width:8px;height:8px;border-radius:999px;background:var(--warn);
+      animation:blink 1s ease-in-out infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+    .ring-who{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:-.02em;
+      margin-bottom:5px}
+    .ring-where{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px}
+    .ring-msg{background:var(--card-2);border-radius:12px;padding:12px 14px;font-size:13.5px;
+      line-height:1.55;color:var(--text);margin-bottom:16px;
+      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    .ring-acts{display:grid;grid-template-columns:1fr auto;gap:9px}
+    .ring-take{border:0;border-radius:12px;background:var(--ok);color:#04231A;
+      font-size:14px;font-weight:700;padding:13px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:9px}
+    .ring-take b{font-family:var(--mono);font-size:13px;opacity:.75}
+    .ring-pass{border:1px solid var(--border);border-radius:12px;background:transparent;
+      color:var(--muted);font-size:13px;padding:13px 16px;cursor:pointer}
+    .ring-pass:hover{color:var(--bad);border-color:var(--bad)}
+    @media (max-width:620px){.ring{right:10px;left:10px;width:auto}}
+    @media (max-width:900px){.desk{grid-template-columns:1fr;height:auto}
+      .desk-left{max-height:340px}.desk-right{min-height:420px}}
+    .quick-views{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px}
+    .qv{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:15px 16px;cursor:pointer;text-align:left;transition:border-color .15s ease}
+    .qv:hover{border-color:var(--primary)}
+    .qv.active{border-color:var(--primary);background:var(--primary-soft)}
+    .qv-n{display:block;font-family:var(--mono);font-size:24px;font-weight:600;
+      letter-spacing:-.02em;line-height:1;margin-bottom:7px}
+    .qv-l{display:block;font-family:var(--mono);font-size:9.5px;font-weight:600;
+      letter-spacing:.09em;text-transform:uppercase;color:var(--muted);line-height:1.4}
+    .qv.urgent .qv-n{color:var(--warn)}
+    .qv.bad .qv-n{color:var(--bad)}
+    @media (max-width:1100px){.quick-views{grid-template-columns:repeat(3,1fr)}}
+    @media (max-width:620px){.quick-views{grid-template-columns:1fr 1fr}}
+    .driver-box{background:var(--card-2);border:1px solid var(--border);border-radius:14px;
+      padding:20px;margin:20px 0}
+    .driver-box h3{margin:0 0 6px;font-family:var(--display);font-weight:700;font-size:16px;
+      letter-spacing:-.02em}
+    .driver-box .note{margin:0 0 16px;color:var(--muted);font-size:13.5px;line-height:1.6}
+    .driver-box .note.warn{color:var(--warn)}
+    .driver-box .note.ok{color:var(--ok)}
+    .driver-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+    .driver-fields input{padding:10px 13px;border:1px solid var(--border);border-radius:10px;
+      background:var(--bg);color:var(--text);font-size:14px;outline:none;width:100%}
+    .driver-fields input:focus{border-color:var(--primary)}
+    .driver-actions{display:flex;gap:9px;flex-wrap:wrap}
+    @media (max-width:700px){.driver-fields{grid-template-columns:1fr}}
+    .pt-doc.rejected{border-color:#7f1d1d;background:rgba(248,113,113,.06)}
+    .pt-doc.approved{border-color:rgba(52,211,153,.35)}
+    .doc-state{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;
+      text-transform:uppercase;padding:2px 7px;border-radius:999px;margin-left:7px;
+      border:1px solid var(--border);color:var(--muted);vertical-align:1px}
+    .doc-state.approved{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+    .doc-state.rejected{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+    .doc-state.pending{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+    .doc-ok,.doc-no{border:1px solid var(--border);background:transparent;border-radius:8px;
+      padding:6px 11px;font-family:var(--mono);font-size:10px;font-weight:600;
+      letter-spacing:.07em;text-transform:uppercase;cursor:pointer;margin-left:6px}
+    .doc-ok{color:var(--ok);border-color:rgba(52,211,153,.4)}
+    .doc-no{color:var(--bad);border-color:rgba(248,113,113,.4)}
+    .doc-ok:disabled,.doc-no:disabled{opacity:.5;cursor:not-allowed}
+    .pt-card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:18px;margin-bottom:12px}
+    .pt-card.needs{border-color:#f59e0b}
+    .pt-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}
+    .pt-head h3{margin:0 0 4px;font-size:17px}
+    .pt-head .who{font-size:12.5px;color:var(--muted);line-height:1.6}
+    .pt-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+    .pt-fact{background:var(--card-2);border:1px solid var(--border);border-radius:11px;padding:10px 12px}
+    .pt-fact .k{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+    .pt-fact .v{font-size:13.5px;font-weight:700;word-break:break-word}
+    .pt-docs{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
+    .pt-doc{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .pt-doc:last-child{border-bottom:0}
+    .pt-doc .n{font-size:13.5px;font-weight:600}
+    .pt-doc .m{font-size:11.5px;color:var(--muted)}
+    .pt-doc .r{display:flex;gap:8px;align-items:center}
+    .doc-open{background:transparent;border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--primary);font-weight:700;font-size:12px;cursor:pointer}
+    .doc-open:hover{border-color:var(--primary)}
+    .pt-missing{color:#fca5a5;font-size:12.5px}
+    .pt-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border)}
+    .pt-actions input[type=text]{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:13.5px}
+    .btn-verify{background:#3b82f6;color:#fff;border:0;border-radius:9px;padding:10px 15px;font-weight:700;font-size:12.5px;cursor:pointer}
+    .btn-activate{background:#10b981;color:#fff;border:0;border-radius:9px;padding:10px 15px;font-weight:700;font-size:12.5px;cursor:pointer}
+    .btn-suspend{background:transparent;color:#fbbf24;border:1px solid #b45309;border-radius:9px;padding:10px 15px;font-weight:700;font-size:12.5px;cursor:pointer}
+    .btn-reject{background:transparent;color:#fca5a5;border:1px solid #7f1d1d;border-radius:9px;padding:10px 15px;font-weight:700;font-size:12.5px;cursor:pointer}
+    .pt-actions button:disabled{opacity:.5;cursor:not-allowed}
+    .status.verified{background:#dbeafe;color:#1e40af}
+    .status.submitted,.status.in_review,.status.draft{background:#fef3c7;color:#92400e}
+    .status.suspended{background:#fee2e2;color:#991b1b}
+    @media (max-width:900px){.pt-facts{grid-template-columns:1fr 1fr}}
+    .refund-box{margin-top:22px;padding:20px;border:1px solid #7f1d1d;border-radius:15px;background:#1a1013}
+    .refund-box h3{margin:0 0 6px;font-size:16px;color:#fca5a5}
+    .refund-box p.note{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.6}
+    .refund-figures{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+    .refund-fig{background:var(--card-2);border:1px solid var(--border);border-radius:11px;padding:11px 13px}
+    .refund-fig .k{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+    .refund-fig .v{font-size:16px;font-weight:700}
+    .refund-fields{display:grid;grid-template-columns:150px 1fr;gap:10px;margin-bottom:12px}
+    .refund-fields input{padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:14px;width:100%}
+    .refund-check{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--text);margin-bottom:14px;cursor:pointer}
+    .refund-check input{width:16px;height:16px;cursor:pointer}
+    .btn-refund{background:#ef4444;color:#fff;border:0;border-radius:10px;padding:12px 20px;font-weight:700;font-size:13.5px;cursor:pointer}
+    .btn-refund:disabled{opacity:.5;cursor:not-allowed}
+    .refund-msg{display:none;margin-top:13px;padding:11px 13px;border-radius:10px;font-size:13.5px;line-height:1.55}
+    .refund-msg.err{background:#7f1d1d;color:#fecaca;border:1px solid #991b1b}
+    .refund-msg.ok{background:#052e22;color:#6ee7b7;border:1px solid #14532d}
+    @media (max-width:900px){.refund-figures{grid-template-columns:1fr}.refund-fields{grid-template-columns:1fr}}
+    @media (max-width:900px){.agent-facts{grid-template-columns:1fr 1fr}}
+    @media (max-width:900px){
+      .stats{grid-template-columns:1fr 1fr}
+      .search-grid{grid-template-columns:1fr}
+      .support-layout{flex-direction:column}
+      .conv-list-box{width:100%;flex:0 0 auto}
+      .conv-list-scroll{max-height:260px}
+      .conv-messages{height:380px}
+      .detail-grid{grid-template-columns:1fr}
+    }
+  
+/* ============================================================
+   ABAS DE MARCA
+
+   Este call centre atende mais do que uma marca, com os mesmos
+   agentes. Cada uma tem a sua fila, e a aba diz onde se está.
+
+   Só aparecem quando há mais do que uma marca: uma aba sozinha é
+   ruído a ocupar espaço no topo.
+   ============================================================ */
+.brand-tabs{display:flex;gap:2px;padding:0 20px;background:var(--card);
+  border-bottom:1px solid var(--border);position:sticky;top:3px;z-index:45;
+  overflow-x:auto;scrollbar-width:none}
+.brand-tabs::-webkit-scrollbar{display:none}
+.brand-tabs[hidden]{display:none!important}
+
+.brand-tab{position:relative;background:transparent;border:0;cursor:pointer;
+  font-family:inherit;font-size:14px;font-weight:600;color:var(--muted);
+  padding:13px 18px 12px;white-space:nowrap;flex:0 0 auto;
+  display:inline-flex;align-items:center;gap:9px;
+  transition:color .15s ease}
+.brand-tab:hover{color:var(--text)}
+.brand-tab.on{color:var(--text)}
+
+/* A barra por baixo leva a cor da marca. É o sinal que se apanha
+   de relance sem ler o nome — e com três marcas ao fim de uma
+   semana, a cor é mais rápida do que o texto. */
+.brand-tab::after{content:"";position:absolute;left:12px;right:12px;bottom:0;
+  height:2.5px;border-radius:2px 2px 0 0;background:transparent;
+  transition:background .18s ease}
+.brand-tab.on::after{background:var(--brand-color,var(--accent))}
+
+.brand-dot{width:8px;height:8px;border-radius:999px;flex:0 0 auto;
+  background:var(--brand-color,var(--accent));opacity:.45}
+.brand-tab.on .brand-dot{opacity:1}
+
+/* O número de conversas à espera nessa marca. Uma marca com fila e
+   sem aviso é uma marca esquecida. */
+.brand-n{font-family:var(--mono);font-size:11px;font-weight:600;
+  background:var(--bad,#B42318);color:#fff;border-radius:999px;
+  padding:1px 7px;min-width:19px;text-align:center}
+.brand-n.zero{display:none}
+
+@media (max-width:700px){
+  .brand-tabs{padding:0 12px}
+  .brand-tab{padding:12px 13px 11px;font-size:13.5px}
+}

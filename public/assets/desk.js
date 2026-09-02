@@ -1276,6 +1276,10 @@ async function loadDesk() {
     desk.capacity = cap || {};
     pintarMarcas();
     renderDesk();
+
+    // O último chat pode ter fechado do lado do parceiro, ou outro
+    // agente pode ter ficado com um dos meus. O estado acompanha.
+    ajustarActive();
     subscribeDesk();
 
     // Uma oferta a tocar neste agente. Vem no mesmo pedido para não
@@ -1313,7 +1317,9 @@ async function loadDesk() {
 function renderDesk() {
   var cap = desk.capacity;
   var mine = cap.my_open_chats || 0;
-  var limit = 2;
+  // Três, não dois. O número real está no claim_chat do Postgres —
+  // aqui é só para mostrar, e quem decide é sempre o servidor.
+  var limit = 3;
 
   el('capMine').textContent = mine + '/' + limit;
   el('capWaiting').textContent = cap.waiting || 0;
@@ -1521,7 +1527,28 @@ async function pegarConversa(chatId) {
 
   await loadDesk();
   await openDeskChat(chatId);
+  ajustarActive();
   return true;
+}
+
+/**
+ * O active entra e sai sozinho.
+ *
+ * Com chats abertos é active; sem eles volta a live. Só se aplica
+ * a quem estava num desses dois — quem se pôs em training ou em
+ * escalating disse que está ocupado, e pegar um chat não desfaz
+ * essa decisão.
+ */
+function ajustarActive() {
+  if (desk.state !== 'live' && desk.state !== 'active') return;
+
+  var meus = (desk.chats || []).filter(function (c) {
+    return c.assigned_to === adminId() && c.status === 'open';
+  }).length;
+
+  var devia = meus > 0 ? 'active' : 'live';
+
+  if (desk.state !== devia) setDeskState(devia, true);
 }
 
 function paintChatOwnership(chat) {
@@ -1928,10 +1955,7 @@ setTimeout(function () {
   document.body.setAttribute('data-duty', 'offline');
   desk.state = 'offline';
   el('dutyNote').textContent = STATE_NOTES.offline;
-
-  qsa('.st').forEach(function (b) {
-    b.classList.toggle('active', b.getAttribute('data-state') === 'offline');
-  });
+  pintarDuty();
 }, 8000);
 
 async function aplicarEstado(meu) {
@@ -2062,6 +2086,9 @@ el('histBack').addEventListener('click', function () {
 });
 
 el('chatCloseBtn').addEventListener('click', async function () {
+  // Os trinta segundos arrancam ao fechar, não à resposta do
+  // servidor: a decisão é do agente e já foi tomada.
+  setTimeout(pedirEscolha, 400);
   // Congela o cronómetro no valor final antes de qualquer pedido:
   // se a rede demorar, o número mostrado é o do momento em que
   // carregaste e não o da resposta do servidor.
@@ -2111,13 +2138,217 @@ el('chatUrgentBtn').addEventListener('click', async function () {
  * propósito: um separador esquecido aberto diria "online" a noite
  * inteira, e um parceiro escreveria à espera de resposta imediata.
  */
-var STATE_NOTES = {
-  live: 'You are taking chats. New ones can be assigned to you.',
-  break: 'On a break. The chats you already have still work, but no new ones ' +
-    'come to you — and you still count as being on shift.',
-  offline: 'Offline. You will not be given new chats.',
-  unknown: 'Checking your shift...'
-};
+/**
+ * Os estados de um agente.
+ *
+ * `takes` diz se chegam chats novos. Só o live e o active o fazem —
+ * os outros são formas diferentes de estar ocupado, e distingui-las
+ * é o que torna o relatório do dia útil: "quatro horas em break" e
+ * "duas em break, duas em formação" são coisas diferentes.
+ *
+ * `auto` marca o que não se escolhe. O active entra quando se pega
+ * um chat e sai quando se larga o último.
+ */
+var STATES = [
+  { key: 'live', label: 'Live', color: '#0F766E', takes: true,
+    note: 'Ready for chats. New ones can be assigned to you.' },
+  { key: 'active', label: 'Active', color: '#16A34A', takes: true, auto: true,
+    note: 'You have chats open. This changes on its own as you take and close them.' },
+  { key: 'escalating', label: 'Escalating', color: '#B45309', takes: false,
+    note: 'Working something out with a supervisor. No new chats reach you, ' +
+      'and the ones you have stay with you.' },
+  { key: 'follow-up', label: 'Follow-up', color: '#7C3AED', takes: false,
+    note: 'Chasing something that came out of a conversation. No new chats.' },
+  { key: 'training', label: 'Training', color: '#0891B2', takes: false,
+    note: 'In training. You still count as on shift.' },
+  { key: 'admin', label: 'Admin', color: '#64748B', takes: false,
+    note: 'Administrative work. No new chats.' },
+  { key: 'break', label: 'Break', color: '#D97706', takes: false,
+    note: 'On a break. The chats you already have still work, and you still ' +
+      'count as being on shift.' },
+  { key: 'offline', label: 'Offline', color: '#94A3B8', takes: false,
+    note: 'Off duty. You will not be given new chats.' }
+];
+
+function estadoInfo(chave) {
+  return STATES.find(function (s) { return s.key === chave; }) ||
+    { key: chave, label: chave, color: '#94A3B8', takes: false, note: '' };
+}
+
+var STATE_NOTES = (function () {
+  var m = { unknown: 'Checking your shift...' };
+  STATES.forEach(function (s) { m[s.key] = s.note; });
+  return m;
+})();
+
+// ============================================================
+// O DROPDOWN
+// ============================================================
+function pintarDuty() {
+  var info = estadoInfo(desk.state);
+  var btn = el('dutyBtn');
+
+  el('dutyLabel').textContent = desk.state === 'unknown' ? '—' : info.label;
+  btn.style.setProperty('--duty-color', info.color);
+  btn.classList.toggle('taking', Boolean(info.takes));
+
+  el('dutyMenu').innerHTML = STATES.map(function (st) {
+    // O active aparece mas não se clica: entra e sai sozinho.
+    var tempo = tempoDoDia[st.key];
+
+    return '<button class="duty-opt' + (st.key === desk.state ? ' on' : '') +
+      (st.auto ? ' auto' : '') + '" data-duty-opt="' + st.key + '" type="button"' +
+      (st.auto ? ' disabled' : '') + '>' +
+      '<span class="dot" style="background:' + st.color + '"></span>' +
+      escapeHtml(st.label) +
+      (tempo ? '<small>' + duracao(tempo) + '</small>' : '') +
+      '</button>' +
+      (st.key === 'admin' ? '<div class="duty-sep"></div>' : '');
+  }).join('');
+
+  qsa('[data-duty-opt]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      fecharDuty();
+      pararEscolha();
+      setDeskState(b.getAttribute('data-duty-opt'));
+    });
+  });
+}
+
+function abrirDuty() {
+  el('dutyMenu').hidden = false;
+  el('dutyBtn').setAttribute('aria-expanded', 'true');
+}
+
+function fecharDuty() {
+  el('dutyMenu').hidden = true;
+  el('dutyBtn').setAttribute('aria-expanded', 'false');
+}
+
+el('dutyBtn').addEventListener('click', function (e) {
+  e.stopPropagation();
+  if (el('dutyMenu').hidden) { pintarDuty(); abrirDuty(); }
+  else fecharDuty();
+});
+
+document.addEventListener('click', function (e) {
+  if (!el('dutyMenu').hidden && !e.target.closest('#duty')) fecharDuty();
+});
+
+// ============================================================
+// O TEMPO DO DIA
+//
+// Quanto tempo em cada estado, hoje. O estado atual conta ao vivo,
+// senão apareceria a zero até se mudar dele.
+// ============================================================
+var tempoDoDia = {};
+var diaTimer = null;
+var estadoDesde = Date.now();
+
+function duracao(seg) {
+  var s = Math.max(0, Math.round(seg));
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+
+  if (h > 0) return h + 'h' + String(m).padStart(2, '0');
+  if (m > 0) return m + 'm';
+  return s + 's';
+}
+
+async function carregarDia() {
+  try {
+    var res = await deskFetch('/api/admin/my-day');
+    tempoDoDia = {};
+    (res.states || []).forEach(function (r) {
+      tempoDoDia[r.state] = r.seconds || 0;
+    });
+  } catch (e) {
+    tempoDoDia = {};
+  }
+  pintarDia();
+}
+
+function pintarDia() {
+  var caixa = el('dayTime');
+  if (!caixa || caixa.__missing) return;
+
+  // O estado atual conta desde que começou, somado ao que já lá
+  // estava. Sem isto ficava parado até ao próximo carregamento.
+  var vivo = Object.assign({}, tempoDoDia);
+
+  if (desk.state && desk.state !== 'unknown' && desk.state !== 'offline') {
+    vivo[desk.state] = (vivo[desk.state] || 0) +
+      Math.round((Date.now() - estadoDesde) / 1000);
+  }
+
+  var linhas = STATES
+    .filter(function (st) { return vivo[st.key] > 0; })
+    .map(function (st) {
+      return '<span class="dt' + (st.key === desk.state ? ' now' : '') + '">' +
+        '<i style="background:' + st.color + '"></i>' +
+        escapeHtml(st.label) + ' <b>' + duracao(vivo[st.key]) + '</b></span>';
+    });
+
+  caixa.innerHTML = linhas.length
+    ? linhas.join('')
+    : '<span class="dt">Nothing logged today yet</span>';
+}
+
+function arrancarDia() {
+  if (diaTimer) clearInterval(diaTimer);
+  // De dez em dez segundos chega: os números são em minutos, e um
+  // intervalo por segundo só gastaria bateria.
+  diaTimer = setInterval(pintarDia, 10000);
+}
+
+// ============================================================
+// OS TRINTA SEGUNDOS
+//
+// Ao fechar um chat, o agente tem meio minuto para dizer o que vai
+// fazer a seguir. Sem isto, quem fechasse e fosse tratar de outra
+// coisa aparecia disponível e recebia logo outro.
+//
+// Se não escolher, o sistema decide: active se ainda tem chats
+// abertos, live se não tem.
+// ============================================================
+var escolha = { timer: null, left: 0 };
+
+function pararEscolha() {
+  if (escolha.timer) { clearInterval(escolha.timer); escolha.timer = null; }
+  el('dutyCountdown').hidden = true;
+}
+
+function pedirEscolha() {
+  // Em escalating não se pergunta nada: o agente disse que está a
+  // resolver um caso, e sai disso quando quiser.
+  if (desk.state === 'escalating') return;
+
+  pararEscolha();
+  escolha.left = 30;
+
+  var abertos = function () {
+    return (desk.chats || []).filter(function (c) {
+      return c.assigned_to === adminId() && c.status === 'open';
+    }).length;
+  };
+
+  el('dutyCountText').textContent = abertos()
+    ? 'Choose your next status — otherwise Active'
+    : 'Choose your next status — otherwise Live';
+
+  el('dutyCountNum').textContent = escolha.left;
+  el('dutyCountdown').hidden = false;
+
+  escolha.timer = setInterval(function () {
+    escolha.left -= 1;
+    el('dutyCountNum').textContent = Math.max(0, escolha.left);
+
+    if (escolha.left <= 0) {
+      pararEscolha();
+      setDeskState(abertos() ? 'active' : 'live', true);
+    }
+  }, 1000);
+}
 
 async function setDeskState(state, aRetomar) {
   var previous = desk.state;
@@ -2125,11 +2356,19 @@ async function setDeskState(state, aRetomar) {
 
   if (state !== 'offline') el('wentOffline').classList.add('hidden');
 
-  qsa('.st').forEach(function (b) {
-    b.classList.toggle('active', b.getAttribute('data-state') === state);
-  });
+  // O tempo no estado anterior fica contado; o novo começa agora.
+  if (previous !== state) {
+    if (previous && previous !== 'unknown' && previous !== 'offline') {
+      tempoDoDia[previous] = (tempoDoDia[previous] || 0) +
+        Math.round((Date.now() - estadoDesde) / 1000);
+    }
+    estadoDesde = Date.now();
+  }
 
-  el('dutyNote').textContent = STATE_NOTES[state];
+  pintarDuty();
+  pintarDia();
+
+  el('dutyNote').textContent = STATE_NOTES[state] || '';
 
   // O estado no <body>: é daqui que a barra do topo tira a cor, e
   // qualquer outra coisa que precise de saber sem perguntar.
@@ -2163,14 +2402,16 @@ async function setDeskState(state, aRetomar) {
     // definido — a cada mudança de estado e a cada batida do ponto.
     await deskFetch('/api/admin/presence', {
       state: state,
-      display_name: deskDisplayName || adminName()
+      display_name: deskDisplayName || adminName(),
+      // O servidor guarda se foi escolha do agente ou decisão do
+      // sistema. No relatório, "meia hora em break" e "meia hora
+      // em break porque ninguém escolheu" não são a mesma coisa.
+      automatic: Boolean(aRetomar)
     });
   } catch (e) {
     avisar('Heads up', e.message);
     desk.state = previous;
-    qsa('.st').forEach(function (b) {
-      b.classList.toggle('active', b.getAttribute('data-state') === previous);
-    });
+    pintarDuty();
     el('dutyNote').textContent = STATE_NOTES[previous];
     return;
   }
@@ -2186,17 +2427,18 @@ async function setDeskState(state, aRetomar) {
       deskFetch('/api/admin/presence', {
         display_name: deskDisplayName || adminName()
       }).catch(function () {});
+
+      // A conta do dia não pode ficar só na memória do browser: um
+      // separador aberto desde manhã acumularia erro. De dois em
+      // dois minutos vai buscar os números reais.
+      carregarDia();
     }, 120000);
   }
 
   await loadDesk();
 }
 
-qsa('.st').forEach(function (b) {
-  b.addEventListener('click', function () {
-    setDeskState(b.getAttribute('data-state'));
-  });
-});
+
 
 
 
@@ -2487,15 +2729,28 @@ async function passRing(declined) {
     // de receber chamadas.
     if (r && r.went_offline) {
       desk.state = 'offline';
-      qsa('.st').forEach(function (b) {
-        b.classList.toggle('active', b.getAttribute('data-state') === 'offline');
-      });
+      estadoDesde = Date.now();
+      pintarDuty();
+      pintarDia();
       el('dutyNote').textContent = STATE_NOTES.offline;
 
       if (desk.heartbeat) { clearInterval(desk.heartbeat); desk.heartbeat = null; }
 
+      // A contagem dos trinta segundos pós-fecho, se estivesse a
+      // correr, deixa de fazer sentido: já não há decisão a tomar.
+      pararEscolha();
+
       el('wentOffline').classList.remove('hidden');
-      ringTone();
+
+      /**
+       * O som toca aqui de propósito, mesmo estando offline.
+       *
+       * O podeTocar recusa em offline — e é essa a regra. Mas este
+       * é o único momento em que o silêncio seria contra o agente:
+       * ele acabou de perder uma chamada e a única forma de o saber
+       * é olhar para um ecrã que não estava a ver.
+       */
+      forcarTom();
     }
   } catch (e) {
     console.error('pass:', e.message);
@@ -2511,6 +2766,26 @@ el('backOnline').addEventListener('click', function () {
 
 el('stayOffline').addEventListener('click', function () {
   el('wentOffline').classList.add('hidden');
+});
+
+/**
+ * A janela NÃO fecha com Escape nem com um clique fora.
+ *
+ * É a única do painel assim, e de propósito: fechá-la sem
+ * responder deixaria o agente offline a pensar que continua ao
+ * serviço — que é exatamente a situação que ela existe para
+ * evitar. Tem de haver uma escolha.
+ */
+el('wentOffline').addEventListener('click', function (e) {
+  if (e.target === el('wentOffline')) {
+    // Um clique fora chama a atenção para os botões em vez de
+    // fechar. Sem reação nenhuma, parece que a página bloqueou.
+    var caixa = el('wentOffline').querySelector('.still');
+    if (!caixa) return;
+    caixa.style.animation = 'none';
+    void caixa.offsetWidth;
+    caixa.style.animation = 'stillUp .28s cubic-bezier(.22,1.1,.36,1)';
+  }
 });
 
 function subscribeDesk() {
@@ -3738,7 +4013,22 @@ function tone(freq, startAt, length, volume, shape) {
  * quem estiver ao serviço num sítio onde o som não sirva.
  */
 function podeTocar() {
-  return soundOn && desk.state === 'live';
+  // Live e active: os dois estados em que chegam chats.
+  return soundOn && (desk.state === 'live' || desk.state === 'active');
+}
+
+/**
+ * Toca ignorando o estado.
+ *
+ * Só para o "ainda estás aqui?". É a única situação em que avisar
+ * alguém que está offline faz sentido: foi posto offline sem o ter
+ * escolhido, e não tem outra forma de o descobrir.
+ */
+function forcarTom() {
+  var antes = desk.state;
+  desk.state = 'live';
+  try { ringTone(); } catch (e) {}
+  desk.state = antes;
 }
 
 /**
@@ -3751,7 +4041,7 @@ function podeTocar() {
  * O separador certo mostra o número ao voltar, e nada se perde.
  */
 function podeNotificar() {
-  return desk.state === 'live';
+  return desk.state === 'live' || desk.state === 'active';
 }
 
 function beep() {
@@ -4958,8 +5248,11 @@ async function init() {
 
   await Promise.all([
     iniciarApoio(),
-    loadDesk()
+    loadDesk(),
+    carregarDia()
   ]);
+
+  arrancarDia();
 
   subscribeToAllConversations();
   watchLive();

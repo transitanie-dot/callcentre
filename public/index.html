@@ -16,7 +16,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="/assets/desk.css">
 </head>
-<body>
+<!-- Arranca em 'unknown' no próprio HTML, não por JavaScript.
+     Posto pelo script, havia sempre um instante entre o HTML
+     aparecer e o script correr — e nesse instante os botões
+     mostravam-se sem estado nenhum. -->
+<body data-duty="unknown">
 
   <div id="gateView" class="gate">
     <div class="gate-card">
@@ -101,7 +105,11 @@
       <span class="dot"></span>Live</button>
     <button class="st brk" data-state="break" type="button">
       <span class="dot"></span>Break</button>
-    <button class="st off active" data-state="offline" type="button">
+    <!-- Sem 'active' de origem. Estava a dizer offline antes de o
+         painel ter perguntado o que quer que fosse — e isso via-se
+         a cada recarregamento, durante o segundo que a resposta
+         demorava a chegar. -->
+    <button class="st off" data-state="offline" type="button">
       <span class="dot"></span>Offline</button>
   </div>
 

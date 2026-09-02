@@ -536,9 +536,17 @@
 
     .duty-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;
       background:var(--muted);transition:background .25s}
-    body[data-duty="live"] .duty-bar{background:var(--ok)}
-    body[data-duty="break"] .duty-bar{background:var(--warn)}
-    body[data-duty="offline"] .duty-bar{background:var(--bad)}
+    /* As mesmas cores do dropdown. Estavam a usar as variáveis de
+       tema e não batiam certo com o botão — a barra dizia uma cor e
+       o estado ao lado dizia outra. */
+    body[data-duty="live"] .duty-bar{background:#16A34A}
+    body[data-duty="active"] .duty-bar{background:#2563EB}
+    body[data-duty="escalating"] .duty-bar{background:#C2410C}
+    body[data-duty="follow-up"] .duty-bar{background:#7C3AED}
+    body[data-duty="training"] .duty-bar{background:#0891B2}
+    body[data-duty="admin"] .duty-bar{background:#64748B}
+    body[data-duty="break"] .duty-bar{background:#D97706}
+    body[data-duty="offline"] .duty-bar{background:#DC2626}
     /* Offline com conversas à espera é o caso que não pode passar
        despercebido. */
     body[data-duty="offline"].has-waiting .duty-bar{
@@ -837,70 +845,109 @@
 /* ============================================================
    ESTADO DO AGENTE
 
-   Oito estados, num dropdown. Com botões eram oito caixas a
-   encher a barra, cada uma pequena demais para se acertar nela.
+   Oito estados. Com botões eram oito caixas a encher a barra,
+   cada uma pequena demais para se acertar nela.
+
+   O botão mostra quem está e em quê: as iniciais, o nome, e o
+   estado por baixo. Numa equipa que partilha máquinas, saber de
+   quem é a sessão importa tanto como saber o estado.
    ============================================================ */
 .duty{position:relative;flex:0 0 auto}
 
-.duty-btn{display:inline-flex;align-items:center;gap:9px;
-  background:var(--card-2);border:1px solid var(--border);border-radius:12px;
-  padding:9px 13px;font:inherit;font-size:14px;font-weight:600;
-  color:var(--text);cursor:pointer;min-width:158px;
-  transition:border-color .15s ease}
+.duty-btn{display:flex;align-items:center;gap:11px;
+  background:var(--card-2);border:1px solid var(--border);border-radius:14px;
+  padding:7px 13px 7px 8px;font:inherit;color:var(--text);cursor:pointer;
+  min-width:210px;text-align:left;
+  transition:border-color .16s ease,background .16s ease}
 .duty-btn:hover{border-color:var(--muted)}
-.duty-btn .dot{width:9px;height:9px;border-radius:999px;flex:0 0 auto;
-  background:var(--duty-color,var(--muted))}
-.duty-caret{width:15px;height:15px;margin-left:auto;opacity:.5;flex:0 0 auto}
+.duty-btn:focus-visible{outline:2px solid var(--duty-color,var(--accent));
+  outline-offset:2px}
 
-/* Em live e active o ponto pulsa: são os dois estados em que
-   chegam chats, e é a diferença que interessa ver de relance. */
-.duty-btn.taking .dot{animation:dutyPulse 1.8s ease-in-out infinite}
-@keyframes dutyPulse{0%,100%{opacity:1;transform:scale(1)}
-  50%{opacity:.4;transform:scale(.8)}}
+/* As iniciais, com a cor do estado. É o que se vê primeiro, e a
+   cor diz o estado antes de se ler o texto. */
+.duty-av{width:34px;height:34px;border-radius:11px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--duty-color,var(--muted));color:#fff;
+  font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:-.02em;
+  position:relative;transition:background .2s ease}
 
-.duty-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:70;
-  min-width:238px;background:var(--card);border:1px solid var(--border);
-  border-radius:14px;padding:6px;
-  box-shadow:0 18px 42px -10px rgba(0,0,0,.34)}
+/* Um anel a pulsar quando chegam chats. Só em live e active — são
+   os dois estados que importam distinguir de relance. */
+.duty-btn.taking .duty-av::after{content:"";position:absolute;inset:-3px;
+  border-radius:14px;border:2px solid var(--duty-color,var(--accent));
+  opacity:.5;animation:dutyRing 2s ease-in-out infinite}
+@keyframes dutyRing{0%,100%{transform:scale(1);opacity:.5}
+  50%{transform:scale(1.12);opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .duty-btn.taking .duty-av::after{animation:none}
+}
+
+.duty-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.duty-txt b{font-size:13.5px;font-weight:600;line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.duty-txt span{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--duty-color,var(--muted));font-weight:600}
+
+.duty-caret{width:15px;height:15px;opacity:.45;flex:0 0 auto}
+
+/* ---------- o menu ---------- */
+.duty-menu{position:absolute;top:calc(100% + 7px);left:0;z-index:70;
+  min-width:262px;background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:6px;
+  box-shadow:0 20px 48px -12px rgba(0,0,0,.38);
+  animation:dutyDrop .16s cubic-bezier(.22,1,.36,1)}
 .duty-menu[hidden]{display:none!important}
+@keyframes dutyDrop{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 
-.duty-opt{display:flex;align-items:center;gap:10px;width:100%;
-  background:transparent;border:0;border-radius:10px;padding:10px 11px;
-  font:inherit;font-size:14px;color:var(--text);cursor:pointer;text-align:left}
-.duty-opt:hover{background:var(--card-2)}
-.duty-opt.on{background:var(--card-2);font-weight:600}
+.duty-opt{display:flex;align-items:center;gap:11px;width:100%;
+  background:transparent;border:0;border-radius:11px;padding:10px 12px;
+  font:inherit;font-size:14px;color:var(--text);cursor:pointer;text-align:left;
+  transition:background .12s ease}
+.duty-opt:hover:not(:disabled){background:var(--card-2)}
+.duty-opt.on{background:var(--card-2)}
 .duty-opt .dot{width:9px;height:9px;border-radius:999px;flex:0 0 auto}
+
+/* Uma marca discreta no estado atual. Um fundo diferente sozinho
+   perde-se quando se passa o rato pelas outras opções. */
+.duty-opt.on::after{content:"";width:5px;height:5px;border-radius:999px;
+  background:var(--text);margin-left:auto;flex:0 0 auto;opacity:.4}
 .duty-opt small{margin-left:auto;font-family:var(--mono);font-size:11px;
   color:var(--muted);font-weight:500}
+.duty-opt.on small{margin-left:auto}
+.duty-opt.on small + *{margin-left:0}
 
 /* O active não se escolhe: entra e sai sozinho conforme se tem
    chats abertos. Fica visível para se perceber onde se está. */
-.duty-opt.auto{opacity:.5;cursor:not-allowed}
-.duty-sep{height:1px;background:var(--border);margin:5px 8px}
+.duty-opt.auto{opacity:.45;cursor:default}
+.duty-sep{height:1px;background:var(--border);margin:5px 10px}
 
 /* ---------- os trinta segundos ---------- */
-.duty-countdown{display:inline-flex;align-items:center;gap:10px;
+.duty-countdown{display:inline-flex;align-items:center;gap:11px;
   background:var(--warn-bg,#FDF6E7);color:var(--warn,#8A5A12);
   border:1px solid var(--warn-rule,#F0D9A8);border-radius:999px;
-  padding:7px 14px;font-size:13px;font-weight:600;
-  animation:msgIn .25s ease}
+  padding:8px 8px 8px 15px;font-size:13px;font-weight:600;
+  animation:dutyDrop .2s ease}
 .duty-countdown[hidden]{display:none!important}
-.duty-countdown strong{font-family:var(--mono);font-size:15px;
-  font-variant-numeric:tabular-nums;min-width:22px;text-align:right}
+.duty-countdown strong{font-family:var(--mono);font-size:13px;font-weight:700;
+  font-variant-numeric:tabular-nums;min-width:30px;text-align:center;
+  background:var(--warn,#8A5A12);color:var(--card);border-radius:999px;
+  padding:3px 8px}
 
 /* ---------- o dia ---------- */
-.daytime{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
-  margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
-.daytime b{color:var(--text);font-weight:600}
-.daytime .dt{display:inline-flex;align-items:center;gap:6px}
+.daytime{display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  margin-left:auto;font-size:12px;color:var(--muted)}
+.daytime .dt{display:inline-flex;align-items:center;gap:7px}
 .daytime .dt i{width:7px;height:7px;border-radius:999px;font-style:normal;
   flex:0 0 auto}
+.daytime b{font-family:var(--mono);color:var(--text);font-weight:600;
+  font-variant-numeric:tabular-nums}
 .daytime .dt.now b{color:var(--ok,#0F766E)}
+.daytime .dt.now i{box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
 
 @media (max-width:900px){
-  .daytime{width:100%;margin-left:0;padding-top:8px;
+  .daytime{width:100%;margin-left:0;padding-top:10px;
     border-top:1px solid var(--border)}
-  .duty-btn{min-width:0}
+  .duty-btn{min-width:0;flex:1}
 }
 
 /* ============================================================

@@ -2198,10 +2198,7 @@ qsa('.st').forEach(function (b) {
   });
 });
 
-el('testSound').addEventListener('click', function () {
-  unlockAudio();
-  ringTone();
-});
+
 
 // O aviso laranja leva ao separador e à conversa mais antiga.
 el('deskAlert').addEventListener('click', function () {
@@ -3613,20 +3610,18 @@ var soundOn = true;
 var titleTimer = null;
 var BASE_TITLE = document.title;
 
-try { soundOn = localStorage.getItem('airportlink-admin-sound') !== 'off'; } catch (e) {}
-
-function paintSoundBtn() {
-  el('soundBtn').classList.toggle('off', !soundOn);
-  el('soundBtn').title = soundOn ? 'Alert sound is on' : 'Alert sound is off';
-}
-paintSoundBtn();
-
-el('soundBtn').addEventListener('click', function () {
-  soundOn = !soundOn;
-  try { localStorage.setItem('airportlink-admin-sound', soundOn ? 'on' : 'off'); } catch (e) {}
-  paintSoundBtn();
-  if (soundOn) beep();
-});
+/**
+ * O som segue o estado, e mais nada.
+ *
+ * Havia um interruptor à parte, e com ele duas coisas a dizerem se
+ * o som toca: o estado e o botão. Um agente em Live com o som
+ * desligado num separador esquecido perdia chamadas sem perceber
+ * porquê — e não tinha como descobrir.
+ *
+ * Agora é uma regra só: em Live há som, em Break e Offline não.
+ * O soundOn continua declarado lá em cima e fica sempre verdadeiro,
+ * para o podeTocar funcionar sem se reescrever tudo o que o usa.
+ */
 
 /** Duas notas curtas geradas na hora. Sem ficheiro de som para
  *  carregar, e impossível de bloquear por um adblocker. */
@@ -3686,7 +3681,6 @@ function marcarPronto() {
   document.removeEventListener('keydown', unlockAudio);
   document.removeEventListener('pointerdown', unlockAudio);
   document.removeEventListener('touchstart', unlockAudio);
-  el('soundLocked').classList.add('hidden');
   document.body.classList.remove('sound-locked');
 }
 
@@ -5011,10 +5005,11 @@ async function init() {
 
     // O erro fica no ecrã, não só na consola. Quem está a olhar
     // para o painel não tem a consola aberta.
-    var aviso = el('gateErr');
+    var aviso = el('gateError');
     if (aviso && !aviso.__missing) {
       aviso.textContent = e.message;
       aviso.classList.remove('hidden');
+      aviso.style.display = 'block';
     }
   }
 

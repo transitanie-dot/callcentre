@@ -997,3 +997,50 @@
   .still{padding:26px 22px}
   .still-btns{flex-direction:column-reverse}
 }
+
+/* ============================================================
+   AVATARES
+
+   As iniciais continuam a ser o valor por omissão e funcionam
+   bem. A fotografia é opcional — e quando existe, substitui as
+   iniciais no mesmo espaço, sem mudar o desenho à volta.
+   ============================================================ */
+.duty-pic{width:34px;height:34px;border-radius:11px;object-fit:cover;
+  flex:0 0 auto;position:absolute;left:8px;top:50%;transform:translateY(-50%)}
+.duty-pic.hidden{display:none!important}
+.duty-btn{position:relative}
+/* Com fotografia, as iniciais escondem-se mas o espaço fica: é o
+   que impede o botão de saltar quando a imagem acaba de carregar. */
+.duty-btn.has-pic .duty-av{visibility:hidden}
+.duty-btn.has-pic.taking .duty-pic{box-shadow:0 0 0 2px var(--card),
+  0 0 0 4px var(--duty-color,var(--accent))}
+
+/* ---------- na conversa ---------- */
+.msg-pic{width:28px;height:28px;border-radius:999px;object-fit:cover;
+  flex:0 0 auto}
+.msg-ini{width:28px;height:28px;border-radius:999px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--card-2);color:var(--muted);
+  font-family:var(--display);font-weight:700;font-size:11px}
+.d-row.theirs .msg-ini{background:var(--accent);color:#fff}
+
+/* A fotografia só na PRIMEIRA mensagem de uma sequência. Repeti-la
+   em cinco mensagens seguidas do mesmo agente é ruído, e é o que
+   toda a gente faz mal. */
+.d-row{display:flex;gap:9px;align-items:flex-end}
+.d-row:not(.turn) .msg-pic,
+.d-row:not(.turn) .msg-ini{visibility:hidden}
+.d-row.mine{flex-direction:row-reverse}
+
+/* ---------- mudar de fotografia ---------- */
+.av-row{display:flex;align-items:center;gap:12px;padding:12px;
+  border-top:1px solid var(--border);margin-top:5px}
+.av-now{width:38px;height:38px;border-radius:12px;flex:0 0 auto;object-fit:cover;
+  background:var(--card-2)}
+.av-txt{flex:1;min-width:0;font-size:12.5px;color:var(--muted);line-height:1.45}
+.av-act{background:transparent;border:1px solid var(--border);border-radius:9px;
+  padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--text);cursor:pointer;flex:0 0 auto}
+.av-act:hover{border-color:var(--muted)}
+.av-act.drop{color:var(--bad);border-color:transparent}
+.av-act.drop:hover{border-color:var(--bad)}

@@ -1044,3 +1044,91 @@
 .av-act:hover{border-color:var(--muted)}
 .av-act.drop{color:var(--bad);border-color:transparent}
 .av-act.drop:hover{border-color:var(--bad)}
+
+/* ============================================================
+   A BARRA DO DIA
+
+   Tempo em cada estado, e o que aconteceu: quantas tocaram,
+   quantas atendeu, a média de resposta.
+
+   Na mesma barra do estado porque é onde o agente já está a olhar
+   quando pensa em como lhe está a correr o dia. Numa página à
+   parte, ninguém a abriria.
+   ============================================================ */
+.daybar{display:flex;align-items:center;gap:0;flex-wrap:wrap;
+  margin-left:auto;font-size:12px}
+
+.db{display:inline-flex;align-items:baseline;gap:6px;padding:0 13px;
+  position:relative;white-space:nowrap}
+/* Um traço fino entre grupos em vez de espaço: com nove números
+   seguidos, o olho precisa de saber onde acaba um e começa outro. */
+.db + .db::before{content:"";position:absolute;left:0;top:50%;
+  transform:translateY(-50%);width:1px;height:15px;background:var(--border)}
+.db-k{color:var(--muted);font-size:11px}
+.db-v{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums;
+  color:var(--text);font-size:12.5px}
+.db i{width:7px;height:7px;border-radius:999px;font-style:normal;flex:0 0 auto;
+  align-self:center}
+
+/* O estado atual destaca-se, e é o único que conta ao vivo. */
+.db.now .db-v{color:var(--duty-color,var(--ok))}
+.db.now i{box-shadow:0 0 0 3px color-mix(in srgb, currentColor 20%, transparent)}
+
+/* Uma taxa de resposta baixa não deve passar despercebida — mas
+   também não deve parecer um alarme a meio da manhã. */
+.db-v.warn{color:var(--warn)}
+.db-v.bad{color:var(--bad)}
+.db-v.good{color:var(--ok)}
+
+@media (max-width:1200px){
+  .daybar{width:100%;margin-left:0;padding-top:10px;margin-top:4px;
+    border-top:1px solid var(--border);gap:2px}
+  .db{padding:0 10px}
+}
+
+/* ============================================================
+   ABAS DE PÚBLICO
+
+   Clientes, motoristas e agências. Um cliente pergunta pela
+   reserva, um motorista pelo pagamento, uma agência pela comissão
+   — misturá-los na mesma fila obriga o agente a mudar de cabeça a
+   cada conversa.
+   ============================================================ */
+.aud-tabs{display:flex;gap:2px;padding:0 20px;background:var(--card);
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.aud-tabs::-webkit-scrollbar{display:none}
+
+.aud-tab{position:relative;background:transparent;border:0;cursor:pointer;
+  font-family:inherit;font-size:14.5px;font-weight:600;color:var(--muted);
+  padding:14px 18px 13px;white-space:nowrap;flex:0 0 auto;
+  display:inline-flex;align-items:center;gap:9px;transition:color .15s ease}
+.aud-tab:hover{color:var(--text)}
+.aud-tab.active{color:var(--text)}
+.aud-tab::after{content:"";position:absolute;left:14px;right:14px;bottom:0;
+  height:2.5px;border-radius:2px 2px 0 0;background:transparent;
+  transition:background .18s ease}
+.aud-tab.active::after{background:var(--accent)}
+
+.aud-n{font-family:var(--mono);font-size:11px;font-weight:600;
+  background:var(--bad);color:#fff;border-radius:999px;padding:1px 7px;
+  min-width:19px;text-align:center}
+.aud-n.hidden{display:none!important}
+
+@media (max-width:700px){
+  .aud-tabs{padding:0 12px}
+  .aud-tab{padding:12px 13px 11px;font-size:13.5px}
+}
+
+/* ---------- o cargo no menu de estado ---------- */
+.duty-who{padding:12px 13px 11px;border-bottom:1px solid var(--border);
+  margin:-6px -6px 6px;background:var(--card-2);border-radius:15px 15px 0 0}
+.duty-who b{display:block;font-size:13.5px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.duty-who span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.duty-role{display:inline-block;margin-top:7px;font-family:var(--mono);
+  font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;
+  background:var(--accent);color:#fff}
+.duty-role.agent{background:var(--card);color:var(--muted);
+  box-shadow:inset 0 0 0 1px var(--border)}

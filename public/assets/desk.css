@@ -833,3 +833,120 @@
   .brand-tabs{padding:0 12px}
   .brand-tab{padding:12px 13px 11px;font-size:13.5px}
 }
+
+/* ============================================================
+   ESTADO DO AGENTE
+
+   Oito estados, num dropdown. Com botões eram oito caixas a
+   encher a barra, cada uma pequena demais para se acertar nela.
+   ============================================================ */
+.duty{position:relative;flex:0 0 auto}
+
+.duty-btn{display:inline-flex;align-items:center;gap:9px;
+  background:var(--card-2);border:1px solid var(--border);border-radius:12px;
+  padding:9px 13px;font:inherit;font-size:14px;font-weight:600;
+  color:var(--text);cursor:pointer;min-width:158px;
+  transition:border-color .15s ease}
+.duty-btn:hover{border-color:var(--muted)}
+.duty-btn .dot{width:9px;height:9px;border-radius:999px;flex:0 0 auto;
+  background:var(--duty-color,var(--muted))}
+.duty-caret{width:15px;height:15px;margin-left:auto;opacity:.5;flex:0 0 auto}
+
+/* Em live e active o ponto pulsa: são os dois estados em que
+   chegam chats, e é a diferença que interessa ver de relance. */
+.duty-btn.taking .dot{animation:dutyPulse 1.8s ease-in-out infinite}
+@keyframes dutyPulse{0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.4;transform:scale(.8)}}
+
+.duty-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:70;
+  min-width:238px;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:6px;
+  box-shadow:0 18px 42px -10px rgba(0,0,0,.34)}
+.duty-menu[hidden]{display:none!important}
+
+.duty-opt{display:flex;align-items:center;gap:10px;width:100%;
+  background:transparent;border:0;border-radius:10px;padding:10px 11px;
+  font:inherit;font-size:14px;color:var(--text);cursor:pointer;text-align:left}
+.duty-opt:hover{background:var(--card-2)}
+.duty-opt.on{background:var(--card-2);font-weight:600}
+.duty-opt .dot{width:9px;height:9px;border-radius:999px;flex:0 0 auto}
+.duty-opt small{margin-left:auto;font-family:var(--mono);font-size:11px;
+  color:var(--muted);font-weight:500}
+
+/* O active não se escolhe: entra e sai sozinho conforme se tem
+   chats abertos. Fica visível para se perceber onde se está. */
+.duty-opt.auto{opacity:.5;cursor:not-allowed}
+.duty-sep{height:1px;background:var(--border);margin:5px 8px}
+
+/* ---------- os trinta segundos ---------- */
+.duty-countdown{display:inline-flex;align-items:center;gap:10px;
+  background:var(--warn-bg,#FDF6E7);color:var(--warn,#8A5A12);
+  border:1px solid var(--warn-rule,#F0D9A8);border-radius:999px;
+  padding:7px 14px;font-size:13px;font-weight:600;
+  animation:msgIn .25s ease}
+.duty-countdown[hidden]{display:none!important}
+.duty-countdown strong{font-family:var(--mono);font-size:15px;
+  font-variant-numeric:tabular-nums;min-width:22px;text-align:right}
+
+/* ---------- o dia ---------- */
+.daytime{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.daytime b{color:var(--text);font-weight:600}
+.daytime .dt{display:inline-flex;align-items:center;gap:6px}
+.daytime .dt i{width:7px;height:7px;border-radius:999px;font-style:normal;
+  flex:0 0 auto}
+.daytime .dt.now b{color:var(--ok,#0F766E)}
+
+@media (max-width:900px){
+  .daytime{width:100%;margin-left:0;padding-top:8px;
+    border-top:1px solid var(--border)}
+  .duty-btn{min-width:0}
+}
+
+/* ============================================================
+   AINDA ESTÁS AQUI?
+
+   Quem deixou passar trinta segundos de toque não estava a olhar
+   para o painel. Uma faixa fina no topo é exatamente o que essa
+   pessoa não vê ao voltar — daí ficar no meio do ecrã, por cima
+   de tudo, com o resto escurecido.
+   ============================================================ */
+.still-back{position:fixed;inset:0;z-index:210;
+  background:rgba(10,14,22,.62);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:stillIn .22s ease}
+.still-back.hidden{display:none!important}
+@keyframes stillIn{from{opacity:0}to{opacity:1}}
+
+.still{background:var(--card);border-radius:22px;padding:32px 30px;
+  max-width:430px;width:100%;text-align:center;
+  box-shadow:0 30px 70px -14px rgba(0,0,0,.5);
+  animation:stillUp .28s cubic-bezier(.22,1.1,.36,1)}
+@keyframes stillUp{from{transform:translateY(14px) scale(.97);opacity:0}
+  to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .still,.still-back{animation:none}
+}
+
+.still-ico{width:56px;height:56px;border-radius:999px;margin:0 auto 20px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--bad-bg);color:var(--bad)}
+.still-ico svg{width:27px;height:27px}
+
+.still h2{font-family:var(--display);font-weight:700;font-size:23px;
+  letter-spacing:-.025em;margin:0 0 12px;color:var(--text)}
+.still p{margin:0 0 12px;font-size:14.5px;line-height:1.65;color:var(--muted)}
+.still-note{font-size:13px!important;color:var(--muted);opacity:.8}
+
+.still-btns{display:flex;gap:10px;margin-top:24px}
+.still-btns button{flex:1;padding:13px 18px;border-radius:12px;font:inherit;
+  font-size:14.5px;font-weight:600;cursor:pointer}
+.still-no{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.still-no:hover{border-color:var(--muted);color:var(--text)}
+.still-yes{background:var(--ok);border:0;color:#04231A}
+.still-yes:hover{filter:brightness(1.06)}
+
+@media (max-width:480px){
+  .still{padding:26px 22px}
+  .still-btns{flex-direction:column-reverse}
+}

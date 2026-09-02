@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Operations — Airportlink</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="/assets/desk.css">
+</head>
+<body>
+
+  <div id="gateView" class="gate">
+    <div class="gate-card">
+      <h1>Admin access</h1>
+      <p>Sign in with an administrator account to continue.</p>
+      <div class="gate-field"><label for="gateEmail">Email</label><input id="gateEmail" type="email" autocomplete="username"></div>
+      <div class="gate-field"><label for="gatePassword">Password</label><input id="gatePassword" type="password" autocomplete="current-password"></div>
+      <button id="gateBtn" class="gate-btn" type="button">Sign in</button>
+      <div id="gateError" class="gate-msg"></div>
+    </div>
+  </div>
+
+  <div id="bootView" class="gate hidden"><div class="gate-card"><p style="margin:0">Checking your session...</p></div></div>
+
+  <div id="adminApp" class="hidden"><div class="container">
+    <div class="header">
+      <div><h1>AIRPORT<b style="color:var(--warn)">LINK</b> &middot; Operations</h1><div class="who" id="adminWhoami"></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button id="soundBtn" class="head-btn" type="button" title="Alert sound" aria-label="Alert sound">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        </button>
+        <button id="themeBtn" class="head-btn" type="button" title="Light or dark" aria-label="Switch theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        </button>
+        <button id="refreshBtn" class="refresh-btn">Refresh</button>
+        <button id="adminLogoutBtn" class="clear-btn">Log out</button>
+      </div>
+    </div>
+
+    <div class="ring hidden" id="ring" role="alertdialog" aria-live="assertive">
+  <div class="ring-bar"><i id="ringBar"></i></div>
+  <div class="ring-body">
+    <div class="ring-tag"><i></i>Incoming chat</div>
+    <div class="ring-who" id="ringWho">&mdash;</div>
+    <div class="ring-where" id="ringWhere">&mdash;</div>
+    <div class="ring-msg" id="ringMsg">&mdash;</div>
+    <div class="ring-acts">
+      <button class="ring-take" id="ringTake" type="button">
+        Answer <b id="ringCount">30</b>
+      </button>
+      <button class="ring-pass" id="ringPass" type="button">Pass</button>
+    </div>
+  </div>
+</div>
+
+<div class="went-off hidden" id="wentOffline">
+  <span><strong>You were set to offline.</strong>
+  A chat rang for 30 seconds and nothing was pressed, so it went to someone else.
+  This is recorded in your activity.</span>
+  <button class="back" id="backOnline" type="button">I am back — go live</button>
+  <button id="stayOffline" type="button">Stay offline</button>
+</div>
+
+<div class="duty-bar" id="dutyBar" aria-hidden="true"></div>
+
+<!-- As abas de marca. Aparecem só quando há mais do que uma: uma
+     aba sozinha é ruído a ocupar espaço. -->
+<div class="brand-tabs" id="brandTabs" hidden></div>
+
+<!-- As caixas de diálogo.
+
+     O prompt() e o confirm() do browser são bloqueados dentro de
+     um iframe com sandbox — que é o caso no Wix. Não davam erro:
+     devolviam null em silêncio, como se a pessoa tivesse cancelado.
+     Daí "escrevi o nome e não gravou". -->
+<div class="ask-back" id="askBack" hidden>
+  <div class="ask" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+    <h3 id="askTitle">Confirm</h3>
+    <p id="askText"></p>
+    <input type="text" id="askInput" maxlength="60" hidden>
+    <div class="ask-btns">
+      <button class="clear-btn" id="askNo" type="button">Cancel</button>
+      <button class="search-btn" id="askYes" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="deskbar">
+  <span class="deskbar-label">Status</span>
+  <div class="states" id="states">
+    <button class="st live" data-state="live" type="button">
+      <span class="dot"></span>Live</button>
+    <button class="st brk" data-state="break" type="button">
+      <span class="dot"></span>Break</button>
+    <button class="st off active" data-state="offline" type="button">
+      <span class="dot"></span>Offline</button>
+  </div>
+
+  <button class="deskbar-alert hidden" id="deskAlert" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.9-5a8.2 8.2 0 0 1-.9-3.8 8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.2Z"/></svg>
+    <span id="deskAlertText">1 waiting</span>
+  </button>
+
+  <button class="deskbar-locked" id="soundLocked" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m23 9-6 6M17 9l6 6"/></svg>
+    Click to enable sound
+  </button>
+
+  <button class="deskbar-test" id="testSound" type="button" title="Test the ring">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+  </button>
+
+  <button class="deskbar-name" id="deskName" type="button" title="The name partners see">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3.5"/></svg>
+    <span id="deskNameText">Set your name</span>
+  </button>
+
+  <span class="deskbar-mine" id="deskbarMine">0/2 chats</span>
+</div>
+
+<div class="body-wrap">
+    <nav class="tabs" aria-label="Sections">
+      <div class="tab-group">Operations</div>
+      <button class="tab-btn active" data-tab="bookingsTab">Bookings <span id="bookingsBadge"></span></button>
+
+      <div class="tab-group">Conversations</div>
+      <button class="tab-btn" data-tab="chatTab">Partner chat <span id="chatBadge"></span></button>
+      <button class="tab-btn" data-tab="supportTab">Customer support <span id="supportBadge"></span></button>
+
+      <div class="tab-group">Money</div>
+      <button class="tab-btn" data-tab="financeTab">Finance</button>
+      <button class="tab-btn" data-tab="moneyTab">Payments <span id="moneyBadge"></span></button>
+
+      <div class="tab-group">People</div>
+      <button class="tab-btn" data-tab="partnersTab">Driver partners <span id="partnersBadge"></span></button>
+      <button class="tab-btn" data-tab="agentsTab">Travel agents <span id="agentsBadge"></span></button>
+      <button class="tab-btn" data-tab="shiftTab">Agent activity</button>
+
+      <div class="tab-group">People</div>
+      <button class="tab-btn" data-tab="accountsTab">Accounts</button>
+    </nav>
+
+    <div class="content">
+
+    <div id="bookingsTab" class="panel active">
+      <div class="quick-views" id="quickViews">
+        <button class="qv active" data-view="today-travel" type="button">
+          <span class="qv-n" id="qvTravel">0</span>
+          <span class="qv-l">Travelling today</span>
+        </button>
+        <button class="qv" data-view="tomorrow-travel" type="button">
+          <span class="qv-n" id="qvTomorrow">0</span>
+          <span class="qv-l">Travelling tomorrow</span>
+        </button>
+        <button class="qv" data-view="today-sold" type="button">
+          <span class="qv-n" id="qvSold">0</span>
+          <span class="qv-l">Booked today</span>
+        </button>
+        <button class="qv" data-view="unassigned" type="button">
+          <span class="qv-n" id="qvUnassigned">0</span>
+          <span class="qv-l">No partner yet</span>
+        </button>
+        <button class="qv" data-view="refunds" type="button">
+          <span class="qv-n" id="qvRefunds">0</span>
+          <span class="qv-l">Refunds to handle</span>
+        </button>
+        <button class="qv" data-view="all" type="button">
+          <span class="qv-n" id="qvAll">0</span>
+          <span class="qv-l">Everything</span>
+        </button>
+      </div>
+
+      <div class="search-section">
+        <h2>Search Bookings</h2>
+        <div class="search-grid">
+          <input type="text" id="searchBookingId" class="search-input" placeholder="Booking ID">
+          <input type="text" id="searchEmail" class="search-input" placeholder="Email">
+          <input type="text" id="searchName" class="search-input" placeholder="Name">
+        </div>
+        <div class="search-grid">
+          <!-- Duas datas diferentes, porque respondem a perguntas
+               diferentes: "quem viaja esta semana" e "quanto se
+               vendeu esta semana" nunca dão a mesma lista. -->
+          <div>
+            <label class="date-lab" for="searchDateFrom">Travel date</label>
+            <div style="display:flex;gap:8px">
+              <input type="date" id="searchDateFrom" class="search-input" title="Travelling from">
+              <input type="date" id="searchDateTo" class="search-input" title="Travelling until">
+            </div>
+          </div>
+          <div>
+            <label class="date-lab" for="searchSoldFrom">Booking date</label>
+            <div style="display:flex;gap:8px">
+              <input type="date" id="searchSoldFrom" class="search-input" title="Booked from">
+              <input type="date" id="searchSoldTo" class="search-input" title="Booked until">
+            </div>
+          </div>
+          <input type="text" id="searchPickup" class="search-input" placeholder="Pickup">
+          <input type="text" id="searchDropoff" class="search-input" placeholder="Dropoff">
+        </div>
+        <div class="search-grid">
+          <select id="searchStatus" class="search-input">
+            <option value="">All Status</option><option value="pending">Pending</option>
+            <option value="paid">Paid</option><option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select><div></div><div></div>
+        </div>
+        <div class="search-actions">
+          <button id="searchBtn" class="search-btn">Search</button>
+          <button id="clearSearchBtn" class="clear-btn">Clear Filters</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Upcoming</h3><p class="value" id="upcomingBookings">0</p></div>
+        <div class="stat-card"><h3>Revenue (listed)</h3><p class="value" id="revenueValue">0</p></div>
+        <div class="stat-card"><h3>Cancelled</h3><p class="value" id="cancelledBookings">0</p></div>
+        <div class="stat-card"><h3>Total</h3><p class="value" id="totalBookings">0</p></div>
+      </div>
+
+      <div class="table-box">
+        <div class="per-page"><label>Show:</label>
+          <select id="perPageSelect">
+            <option value="10">10</option><option value="25">25</option>
+            <option value="50" selected>50</option><option value="100">100</option>
+          </select>
+        </div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Booking ID</th><th>Customer</th><th>Route</th><th>Date &amp; time</th><th>Flight</th><th>Booked by</th><th>Price</th><th>Status</th><th></th></tr></thead>
+          <tbody id="bookingsList"></tbody>
+        </table></div>
+      </div>
+      <div class="pagination" id="bookingsPagination"></div>
+    </div>
+
+    <div id="accountsTab" class="panel">
+      <div class="search-section">
+        <h2>Accounts</h2>
+        <div class="search-grid">
+          <input type="text" id="contactSearch" class="search-input" placeholder="Name or email">
+          <input type="text" id="contactSearchId" class="search-input" placeholder="Client ID">
+          <div></div>
+        </div>
+        <div class="search-actions">
+          <button id="contactSearchBtn" class="search-btn">Search</button>
+          <button id="clearContactSearchBtn" class="clear-btn">Clear Filters</button>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><h3>Total Accounts</h3><p class="value" id="totalContacts">0</p></div>
+        <div class="stat-card"><h3>Admins</h3><p class="value" id="adminContacts">0</p></div>
+        <div class="stat-card"><h3>With Bookings</h3><p class="value" id="contactsWithBookings">0</p></div>
+        <div class="stat-card"><h3>Selected</h3><p class="value" id="selectedContactBookings">0</p></div>
+      </div>
+      <div class="table-box">
+        <div class="per-page"><label>Show:</label>
+          <select id="contactsPerPageSelect">
+            <option value="10">10</option><option value="25">25</option>
+            <option value="50" selected>50</option><option value="100">100</option>
+          </select>
+        </div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Admin</th><th></th></tr></thead>
+          <tbody id="contactsList"></tbody>
+        </table></div>
+      </div>
+      <div class="pagination" id="contactsPagination"></div>
+    </div>
+
+    <div id="financeTab" class="panel">
+      <div class="search-section">
+        <h2>Finance</h2>
+        <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px;line-height:1.6">
+          Everything in euros, converted at the rate that applied on the day of each
+          transaction &mdash; never at today's rate. Figures are management reporting,
+          not accounting output.
+        </p>
+        <div class="fin-periods" id="finPeriods">
+          <button class="fin-period active" data-period="mtd" type="button">This month</button>
+          <button class="fin-period" data-period="last" type="button">Last month</button>
+          <button class="fin-period" data-period="qtd" type="button">This quarter</button>
+          <button class="fin-period" data-period="ytd" type="button">This year</button>
+          <button class="fin-period" data-period="all" type="button">All time</button>
+        </div>
+        <div class="search-actions">
+          <button id="finRefreshBtn" class="search-btn">Refresh</button>
+          <button id="finTxCsv" class="export-btn">Transactions CSV</button>
+          <button id="finMonthCsv" class="export-btn">Monthly summary CSV</button>
+          <button id="finPayoutCsv" class="export-btn">Driver payment run CSV</button>
+          <button id="exportBookingsBtn" class="export-btn">Raw bookings CSV</button>
+          <button id="exportContactsBtn" class="export-btn">Contacts CSV</button>
+        </div>
+        <div id="finNote" style="margin-top:12px;color:var(--muted);font-size:12.5px">&mdash;</div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Revenue</h3><p class="value" id="kGross">&mdash;</p>
+          <p class="stat-sub" id="kGrossSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Refunded</h3><p class="value" id="kRefund">&mdash;</p>
+          <p class="stat-sub" id="kRefundSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Driver cost</h3><p class="value" id="kCost">&mdash;</p>
+          <p class="stat-sub" id="kCostSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Gross margin</h3><p class="value" id="kMargin">&mdash;</p>
+          <p class="stat-sub" id="kMarginSub">&mdash;</p></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Bookings</h3><p class="value" id="kCount">&mdash;</p>
+          <p class="stat-sub" id="kCountSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Average booking</h3><p class="value" id="kAvg">&mdash;</p>
+          <p class="stat-sub" id="kAvgSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Awaiting charge</h3><p class="value" id="kPending">&mdash;</p>
+          <p class="stat-sub" id="kPendingSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Stripe fees</h3><p class="value" id="kFees">&mdash;</p>
+          <p class="stat-sub" id="kFeesSub">&mdash;</p></div>
+      </div>
+
+      <div class="fin-chart-box">
+        <div class="fin-chart-head">
+          <div>
+            <h3>Revenue and margin by month</h3>
+            <p>Bars are revenue after refunds. The line inside each bar is what stayed
+            with us after paying the drivers.</p>
+          </div>
+          <div class="fin-legend">
+            <span><i class="sw net"></i>Net revenue</span>
+            <span><i class="sw margin"></i>Margin</span>
+          </div>
+        </div>
+        <div id="finChart" class="fin-chart"></div>
+      </div>
+
+      <div class="fin-tabs" id="finTabs">
+        <button class="fin-tab active" data-view="months" type="button">By month</button>
+        <button class="fin-tab" data-view="airports" type="button">By airport</button>
+        <button class="fin-tab" data-view="partners" type="button">By partner</button>
+        <button class="fin-tab" data-view="agencies" type="button">By agency</button>
+        <button class="fin-tab" data-view="recon" type="button">Bank reconciliation</button>
+      </div>
+
+      <div class="table-box table-scroll">
+        <table><thead><tr id="finHead"></tr></thead><tbody id="finBody">
+          <tr><td colspan="8" class="loading-row">Loading...</td></tr>
+        </tbody></table>
+      </div>
+      <div id="finViewNote" style="margin-top:12px;color:var(--muted);font-size:12.5px;line-height:1.6"></div>
+    </div>
+
+    <div id="moneyTab" class="panel">
+      <div class="stats">
+        <div class="stat-card"><h3>Cards saved</h3><p class="value" id="mSaved">0</p></div>
+        <div class="stat-card"><h3>Charging soon</h3><p class="value" id="mSoon">0</p></div>
+        <div class="stat-card"><h3>Overdue</h3><p class="value" id="mLate">0</p></div>
+        <div class="stat-card"><h3>Failed</h3><p class="value" id="mFailed">0</p></div>
+      </div>
+
+      <div class="search-section">
+        <h2>Scheduled charges</h2>
+        <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px;line-height:1.6">
+          Bookings paid later. The card is charged automatically 48 hours before pick-up.
+          Anything overdue or failed needs a person.
+        </p>
+        <div class="search-actions">
+          <button id="chgRefreshBtn" class="search-btn">Refresh</button>
+          <button id="chgRunBtn" class="export-btn">Run charge cycle now</button>
+        </div>
+        <div id="chgRunMsg" class="gate-msg" style="margin-top:14px"></div>
+      </div>
+
+      <div id="chgList"><div class="loading-row">Loading...</div></div>
+
+      <div class="search-section" style="margin-top:22px">
+        <h2>Rides nobody has taken</h2>
+        <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px;line-height:1.6">
+          Paid bookings with no partner assigned. The last column is the one that matters:
+          if no partner can even see it, the problem is coverage, not willingness.
+        </p>
+      </div>
+      <div class="table-box table-scroll"><table>
+        <thead><tr><th>Reference</th><th>Route</th><th>Date &amp; time</th><th>Airport</th><th>Payout</th><th>Hours left</th><th>Partners who see it</th></tr></thead>
+        <tbody id="unclaimedList"><tr><td colspan="7" class="loading-row">Loading...</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div id="partnersTab" class="panel">
+      <div class="search-section">
+        <h2>Driver partner applications</h2>
+        <div class="search-grid">
+          <input type="text" id="ptSearch" class="search-input" placeholder="Company, VAT, email or country">
+          <select id="ptStatusFilter" class="search-input">
+            <option value="needs" selected>Waiting on you</option>
+            <option value="submitted">Submitted</option>
+            <option value="verified">Verified, not yet live</option>
+            <option value="approved">Live</option>
+            <option value="suspended">Suspended</option>
+            <option value="rejected">Rejected</option>
+            <option value="">All</option>
+          </select>
+          <div></div>
+        </div>
+        <div class="search-actions">
+          <button id="ptSearchBtn" class="search-btn">Search</button>
+          <button id="ptResetBtn" class="clear-btn">Reset</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Waiting on you</h3><p class="value" id="ptWaiting">0</p></div>
+        <div class="stat-card"><h3>Signed up, not finished</h3><p class="value" id="ptVerified">0</p></div>
+        <div class="stat-card"><h3>Live</h3><p class="value" id="ptLive">0</p></div>
+        <div class="stat-card"><h3>Total</h3><p class="value" id="ptTotal">0</p></div>
+      </div>
+
+      <div id="ptList"><div class="loading-row">Loading...</div></div>
+      <div id="ptError" class="gate-msg" style="margin-top:14px"></div>
+    </div>
+
+    <div id="agentsTab" class="panel">
+      <div class="search-section">
+        <h2>Travel agent applications</h2>
+        <div class="search-grid">
+          <input type="text" id="agentSearch" class="search-input" placeholder="Agency, email or country">
+          <select id="agentStatusFilter" class="search-input">
+            <option value="pending" selected>Pending review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="">All applications</option>
+          </select>
+          <div></div>
+        </div>
+        <div class="search-actions">
+          <button id="agentSearchBtn" class="search-btn">Search</button>
+          <button id="agentRefreshBtn" class="clear-btn">Reset</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Pending</h3><p class="value" id="agentPendingCount">0</p></div>
+        <div class="stat-card"><h3>Approved</h3><p class="value" id="agentApprovedCount">0</p></div>
+        <div class="stat-card"><h3>Rejected</h3><p class="value" id="agentRejectedCount">0</p></div>
+        <div class="stat-card"><h3>Agent bookings</h3><p class="value" id="agentBookingsCount">0</p></div>
+      </div>
+
+      <div id="agentList"><div class="loading-row">Loading...</div></div>
+      <div id="agentError" class="gate-msg" style="margin-top:14px"></div>
+    </div>
+
+    <div id="shiftTab" class="panel">
+      <div class="search-section">
+        <h2>Agent activity</h2>
+        <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px;line-height:1.6">
+          Who was at the desk, for how long, and what happened to the chats that rang for
+          them. Updates as the day goes &mdash; time in a state counts up to right now,
+          not only when someone switches.
+        </p>
+        <div class="fin-periods" id="shiftDays">
+          <button class="fin-period active" data-days="1" type="button">Today</button>
+          <button class="fin-period" data-days="7" type="button">Last 7 days</button>
+          <button class="fin-period" data-days="30" type="button">Last 30 days</button>
+        </div>
+        <div class="search-actions">
+          <button id="shiftRefresh" class="search-btn">Refresh</button>
+          <button id="shiftCsv" class="export-btn">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><h3>Time live</h3><p class="value" id="shLive">&mdash;</p>
+          <p class="stat-sub" id="shLiveSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Chats answered</h3><p class="value" id="shAnswered">&mdash;</p>
+          <p class="stat-sub" id="shAnsweredSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Not answered</h3><p class="value" id="shMissed">&mdash;</p>
+          <p class="stat-sub" id="shMissedSub">&mdash;</p></div>
+        <div class="stat-card"><h3>Resolved</h3><p class="value" id="shResolved">&mdash;</p>
+          <p class="stat-sub" id="shResolvedSub">&mdash;</p></div>
+      </div>
+
+      <div class="table-box table-scroll">
+        <table><thead><tr>
+          <th>Day</th><th>Agent</th>
+          <th style="text-align:right">Live</th>
+          <th style="text-align:right">Break</th>
+          <th style="text-align:right">Rang</th>
+          <th style="text-align:right">Answered</th>
+          <th style="text-align:right">Missed</th>
+          <th style="text-align:right">Passed</th>
+          <th style="text-align:right">Avg answer</th>
+          <th style="text-align:right">Resolved</th>
+          <th style="text-align:right">Answer rate</th>
+        </tr></thead><tbody id="shiftBody">
+          <tr><td colspan="11" class="loading-row">Loading...</td></tr>
+        </tbody></table>
+      </div>
+      <div id="shiftNote" style="margin-top:12px;color:var(--muted);font-size:12.5px;line-height:1.6"></div>
+    </div>
+
+    <div id="chatTab" class="panel">
+      <div class="desk">
+        <div class="desk-left">
+          <div class="desk-status">
+            <p class="state-note" id="dutyNote">Offline. You will not be given new chats.</p>
+
+            <div class="desk-figs">
+              <div><span class="k">Mine</span><span class="v" id="capMine">0/2</span></div>
+              <div><span class="k">Waiting</span><span class="v" id="capWaiting">0</span></div>
+              <div><span class="k">Live</span><span class="v" id="capAgents">0</span></div>
+            </div>
+          </div>
+
+          <div class="desk-list" id="chatList">
+            <div class="no-results">Loading...</div>
+          </div>
+        </div>
+
+        <div class="desk-right" id="chatPane">
+          <div class="desk-blank" id="chatBlank">
+            <strong>Nobody selected</strong>
+            <span>Pick a conversation on the left. You can have two open at a time &mdash;
+            the limit is there so each one gets a real answer.</span>
+          </div>
+
+          <!-- O histórico do parceiro. Desliza sobre a conversa em
+               vez de a substituir: fecha-se e volta-se ao sítio. -->
+          <div class="hist-panel" id="histPanel" hidden>
+            <div class="hist-head">
+              <div>
+                <strong id="histWho">Past conversations</strong>
+                <span id="histCount"></span>
+              </div>
+              <button class="clear-btn" id="histClose" type="button">Close</button>
+            </div>
+            <div class="hist-list" id="histList"></div>
+            <div class="hist-read" id="histRead" hidden>
+              <button class="clear-btn" id="histBack" type="button">&larr; Back to the list</button>
+              <div class="hist-thread" id="histThread"></div>
+            </div>
+          </div>
+
+          <div class="hidden" id="chatOpen" style="display:flex;flex-direction:column;height:100%">
+            <div class="desk-head">
+              <div>
+                <strong id="chatWho">&mdash;</strong>
+                <span id="chatMeta">&mdash;</span>
+              </div>
+              <!-- Há quanto tempo o parceiro espera resposta. Não é
+                   o mesmo que o tempo da conversa: conta desde a
+                   última mensagem dele, e zera quando se responde. -->
+              <div class="reply-warn" id="replyWarn" hidden>
+                <span id="replyWarnText"></span>
+              </div>
+              <!-- O tempo desde que a conversa abriu. Conta enquanto
+                   está aberta e congela no valor final ao fechar. -->
+              <div class="chat-clock" id="chatClock" hidden>
+                <span class="clock-t" id="clockValue">0:00</span>
+                <span class="clock-l" id="clockLabel">open</span>
+              </div>
+              <div class="desk-actions">
+                <button class="clear-btn" id="chatHistBtn" type="button">Past chats</button>
+                <button class="doc-no hidden" id="chatUrgentBtn" type="button">Flag urgent</button>
+                <button class="doc-ok hidden" id="chatCloseBtn" type="button">Close chat</button>
+                <button class="clear-btn hidden" id="chatReleaseBtn" type="button">Hand back</button>
+              </div>
+            </div>
+
+            <div class="desk-claim hidden" id="chatClaimBar">
+              <span id="chatClaimText">Reading only. Take it to reply.</span>
+              <button class="claim-btn" id="chatTakeBtn" type="button">Take this chat</button>
+            </div>
+
+            <div class="desk-split">
+              <div class="desk-body" id="chatThread"></div>
+              <aside class="desk-ctx" id="chatCtx"></aside>
+            </div>
+            <div class="desk-log hidden" id="chatLog"></div>
+
+            <div class="desk-mode">
+              <button class="dm active" data-mode="reply" type="button">Reply to partner</button>
+              <button class="dm" data-mode="note" type="button">Internal note</button>
+              <input type="file" id="deskFile" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden>
+              <button class="dm-clip" id="deskAttach" type="button" title="Attach a file">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.3 20.2a5.5 5.5 0 0 1-7.8-7.8l9.2-9.1a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.1a1.8 1.8 0 0 1-2.6-2.6l8.5-8.4"/></svg>
+              </button>
+            </div>
+
+            <!-- As respostas rápidas. Aparecem ao escrever / na
+                 caixa e filtram enquanto se escreve. -->
+            <div class="snips" id="snipBox" hidden></div>
+
+            <div class="desk-foot">
+              <textarea id="chatReply" rows="2"
+                placeholder="Write your reply — type / for quick replies" maxlength="4000"></textarea>
+              <button class="search-btn" id="chatSendBtn" type="button">Send</button>
+            </div>
+            <div class="gate-msg" id="chatErr" style="margin:0 16px 16px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="supportTab" class="panel">
+      <div class="search-section">
+        <h2>Search Conversations</h2>
+        <div class="search-grid">
+          <input type="text" id="convSearchText" class="search-input" placeholder="Ticket, email, name or subject">
+          <select id="convSearchStatus" class="search-input">
+            <option value="">All Status</option><option value="pending">Pending</option>
+            <option value="open">Open</option><option value="resolved">Resolved</option>
+          </select>
+          <select id="convSearchSubject" class="search-input">
+            <option value="">All Subjects</option><option value="Billing">Billing</option>
+            <option value="Booking">Booking</option><option value="Technical">Technical</option>
+            <option value="Account">Account</option><option value="General">General</option>
+            <option value="Travel Agents/Partnership">Travel Agents/Partnership</option>
+            <option value="Drivers">Drivers</option><option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="search-actions">
+          <button id="convSearchBtn" class="search-btn">Search</button>
+          <button id="convClearSearchBtn" class="clear-btn">Clear Filters</button>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><h3>Pending</h3><p class="value" id="pendingConvCount">0</p></div>
+        <div class="stat-card"><h3>Open</h3><p class="value" id="openConvCount">0</p></div>
+        <div class="stat-card"><h3>Resolved</h3><p class="value" id="resolvedConvCount">0</p></div>
+        <div class="stat-card"><h3>Total</h3><p class="value" id="totalConvCount">0</p></div>
+      </div>
+      <div class="support-layout">
+        <div class="conv-list-box">
+          <div class="conv-list-head">Conversations</div>
+          <div id="convListScroll" class="conv-list-scroll"><div class="loading-row">Loading...</div></div>
+        </div>
+        <div class="conv-thread-box">
+          <div id="convThreadEmpty" class="conv-thread-empty">Select a conversation to view the messages.</div>
+          <div id="convThreadActive" class="hidden" style="flex-direction:column;flex:1;min-width:0;">
+            <div class="conv-thread-head">
+              <div>
+                <div style="font-weight:800;font-size:16px" id="convSubject">-</div>
+                <div style="font-size:12.5px;color:var(--muted)" id="convTicketNumber">Ticket: -</div>
+                <div style="font-size:12.5px;color:var(--muted)" id="convCustomerInfo">-</div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center">
+                <span class="status open" id="convStatusBadge">Open</span>
+                <button id="convToggleStatusBtn" class="status-toggle-btn" type="button">Mark as resolved</button>
+              </div>
+            </div>
+            <div id="convMessages" class="conv-messages"></div>
+            <div id="convNote" class="conv-note hidden"></div>
+            <div class="conv-reply-row">
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <input type="file" id="adminFileInput" style="display:none;" accept="image/*,.pdf,.doc,.docx,.txt">
+                  <button id="adminAttachFileBtn" class="attach-btn" type="button">Attach file</button>
+                  <span id="adminFileChip" class="file-chip">
+                    <span class="name" id="adminFileChipName"></span>
+                    <button class="remove" id="adminFileChipRemove" type="button" title="Remove file" aria-label="Remove file">&times;</button>
+                  </span>
+                </div>
+                <textarea id="convReplyInput" rows="1" placeholder="Type your reply..."></textarea>
+              </div>
+              <button id="convSendBtn" class="btn" type="button">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /.content -->
+    </div><!-- /.body-wrap -->
+  </div></div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <div id="detailsModal" class="modal hidden"><div class="modal-content">
+    <h2 style="margin:0 0 18px">Booking - <span id="detailBookingId"></span></h2>
+    <div class="detail-grid">
+      <div><div class="detail-label">Customer</div><div class="detail-value" id="detailName"></div></div>
+      <div><div class="detail-label">Email</div><div class="detail-value" id="detailEmail"></div></div>
+      <div><div class="detail-label">Phone</div><div class="detail-value" id="detailPhone"></div></div>
+      <div><div class="detail-label">Passengers</div><div class="detail-value" id="detailPassengers"></div></div>
+      <div><div class="detail-label">Flight number</div><div class="detail-value" id="detailFlight"></div></div>
+      <div><div class="detail-label">Booked by</div><div class="detail-value" id="detailBookedBy"></div></div>
+      <div class="detail-full"><div class="detail-label">Passenger contact</div><div class="detail-value" id="detailPassenger"></div></div>
+      <div><div class="detail-label">Payment status</div><div class="detail-value" id="detailPaymentStatus"></div></div>
+      <div><div class="detail-label">Refunded</div><div class="detail-value" id="detailRefunded"></div></div>
+      <div><div class="detail-label">Charged</div><div class="detail-value" id="detailAmountTotal"></div></div>
+      <div><div class="detail-label">Payment method</div><div class="detail-value" id="detailPaymentMethodType"></div></div>
+      <div class="detail-full"><div class="detail-label">Receipt</div><div class="detail-value" id="detailReceiptUrl"></div></div>
+      <div class="detail-full"><div class="detail-label">Pick-up</div><div class="detail-value" id="detailPickup"></div></div>
+      <div class="detail-full"><div class="detail-label">Drop-off</div><div class="detail-value" id="detailDropoff"></div></div>
+      <div><div class="detail-label">Date &amp; time</div><div class="detail-value" id="detailDate"></div></div>
+      <div><div class="detail-label">Price</div><div class="detail-value" id="detailPrice"></div></div>
+      <div><div class="detail-label">Status</div><div class="detail-value"><span id="detailStatus"></span></div></div>
+      <div class="detail-full"><div class="detail-label">Notes</div><div class="detail-value" id="detailNotes"></div></div>
+    </div>
+    <!-- Quem vai buscar o cliente. Aparece só quando a viagem é
+         nos próximos dias: antes disso é cedo para decidir. -->
+    <div class="driver-box hidden" id="driverBox">
+      <h3>Who is picking them up</h3>
+      <p class="note" id="driverState">&mdash;</p>
+
+      <div class="driver-fields">
+        <input type="text" id="mdName" placeholder="Driver name">
+        <input type="text" id="mdPhone" placeholder="Phone the passenger can call">
+        <input type="text" id="mdVehicle" placeholder="Vehicle, e.g. Mercedes V-Class">
+        <input type="text" id="mdPlate" placeholder="Plate">
+      </div>
+
+      <div class="driver-actions">
+        <button id="mdSaveBtn" class="search-btn" type="button">Save this driver</button>
+        <button id="mdSendBtn" class="export-btn" type="button">Send details to passenger</button>
+        <button id="mdHoldBtn" class="clear-btn" type="button">Hold the email</button>
+      </div>
+
+      <div id="driverMsg" class="gate-msg" style="margin-top:12px"></div>
+    </div>
+
+    <div class="refund-box" id="refundBox">
+      <h3>Issue a refund</h3>
+      <p class="note">For cases outside the automatic cancellation window. The money leaves immediately and cannot be undone from here. Partial refunds are allowed; leave the amount empty to refund everything still outstanding.</p>
+
+      <div class="refund-figures">
+        <div class="refund-fig"><div class="k">Charged</div><div class="v" id="refundPaid">&mdash;</div></div>
+        <div class="refund-fig"><div class="k">Already refunded</div><div class="v" id="refundDone">&mdash;</div></div>
+        <div class="refund-fig"><div class="k">Still refundable</div><div class="v" id="refundLeft">&mdash;</div></div>
+      </div>
+
+      <div class="refund-fields">
+        <input type="number" id="refundAmount" min="0" step="0.01" placeholder="Full amount">
+        <input type="text" id="refundReason" placeholder="Reason (goes on the Stripe record and your booking history)">
+      </div>
+
+      <label class="refund-check">
+        <input type="checkbox" id="refundCancel" checked>
+        Also mark this booking as cancelled
+      </label>
+
+      <button class="btn-refund" id="refundBtn" type="button">Issue refund</button>
+      <div id="refundError" class="refund-msg err"></div>
+      <div id="refundOk" class="refund-msg ok"></div>
+    </div>
+
+    <button id="closeDetailsBtn" class="btn btn-danger" style="width:100%;margin-top:18px">Close</button>
+  </div></div>
+
+  <div id="accountDetailsModal" class="modal hidden"><div class="modal-content">
+    <h2 style="margin:0 0 8px"><span id="accountDetailsName"></span></h2>
+    <p style="color:var(--muted);margin:0 0 14px" id="accountDetailsEmail"></p>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="bookingsTabModal">Bookings (<span id="accountBookingsCount">0</span>)</button>
+      <button class="modal-tab" data-tab="chatsTabModal">Support (<span id="accountChatsCount">0</span>)</button>
+    </div>
+    <div id="bookingsTabModal" class="modal-tab-content active"><div class="table-box table-scroll"><table>
+      <thead><tr><th>Booking ID</th><th>Route</th><th>Date</th><th>Price</th><th>Status</th><th>Receipt</th></tr></thead>
+      <tbody id="accountBookingsList"></tbody></table></div></div>
+    <div id="chatsTabModal" class="modal-tab-content"><div class="table-box table-scroll"><table>
+      <thead><tr><th>Ticket</th><th>Subject</th><th>Status</th><th>Last message</th><th>Updated</th></tr></thead>
+      <tbody id="accountChatsList"></tbody></table></div></div>
+    <button class="btn btn-danger" id="closeAccountDetailsBtn" style="width:100%;margin-top:16px">Close</button>
+  </div></div>
+
+
+<!-- A configuração primeiro e sem defer: o desk.js lê o
+     window.__DESK_CONFIG na primeira linha, e se ela chegar depois
+     lê um objeto vazio e cai nos valores de reserva. -->
+<script src="/assets/config.js"></script>
+<script src="/assets/desk.js" defer></script>
+</body>
+</html>

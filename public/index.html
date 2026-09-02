@@ -174,13 +174,16 @@
       <button class="tab-btn" data-tab="financeTab">Finance</button>
       <button class="tab-btn" data-tab="moneyTab">Payments <span id="moneyBadge"></span></button>
 
-      <div class="tab-group">People</div>
-      <button class="tab-btn" data-tab="partnersTab">Driver partners <span id="partnersBadge"></span></button>
-      <button class="tab-btn" data-tab="agentsTab">Travel agents <span id="agentsBadge"></span></button>
-      <button class="tab-btn" data-tab="shiftTab">Agent activity</button>
-
-      <div class="tab-group">People</div>
+      <!-- Um grupo, não dois. Havia dois "People" seguidos, e as
+           contas de clientes ficavam separadas de quem afinal são
+           as mesmas pessoas noutra tabela. -->
+      <div class="tab-group">Database</div>
       <button class="tab-btn" data-tab="accountsTab">Accounts</button>
+      <button class="tab-btn" data-tab="agentsTab">Travel agents <span id="agentsBadge"></span></button>
+      <button class="tab-btn" data-tab="partnersTab">Drivers <span id="partnersBadge"></span></button>
+
+      <div class="tab-group">Team</div>
+      <button class="tab-btn" data-tab="shiftTab">Agent activity</button>
     </nav>
 
     <div class="content">
@@ -431,7 +434,8 @@
         <div class="search-grid">
           <input type="text" id="ptSearch" class="search-input" placeholder="Company, VAT, email or country">
           <select id="ptStatusFilter" class="search-input">
-            <option value="needs" selected>Waiting on you</option>
+            <option value="all" selected>All</option>
+            <option value="needs">Waiting on you</option>
             <option value="submitted">Submitted</option>
             <option value="verified">Verified, not yet live</option>
             <option value="approved">Live</option>
@@ -464,10 +468,10 @@
         <div class="search-grid">
           <input type="text" id="agentSearch" class="search-input" placeholder="Agency, email or country">
           <select id="agentStatusFilter" class="search-input">
-            <option value="pending" selected>Pending review</option>
+            <option value="all" selected>All</option>
+            <option value="pending">Waiting on you</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
-            <option value="">All applications</option>
           </select>
           <div></div>
         </div>

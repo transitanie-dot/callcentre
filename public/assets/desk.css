@@ -527,7 +527,12 @@
        afirmação que ainda não podemos fazer. */
     body[data-duty="unknown"] .duty-bar{background:var(--border);
       animation:dutyWarn 2s ease-in-out infinite}
-    body[data-duty="unknown"] .st{opacity:.35;pointer-events:none}
+    /* Esbatidos enquanto não se sabe o estado, mas CLICÁVEIS.
+       O pointer-events:none deixava os botões mortos se o marcador
+       ficasse preso em 'unknown' — e um painel onde não se consegue
+       entrar ao serviço é pior do que um que mostra o estado errado
+       durante um segundo. */
+    body[data-duty="unknown"] .st{opacity:.45}
 
     .duty-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;
       background:var(--muted);transition:background .25s}

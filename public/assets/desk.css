@@ -532,7 +532,21 @@
        ficasse preso em 'unknown' — e um painel onde não se consegue
        entrar ao serviço é pior do que um que mostra o estado errado
        durante um segundo. */
-    body[data-duty="unknown"] .st{opacity:.45}
+/* Enquanto não se sabe o estado, os botões não aparecem de todo.
+       Mostrar um deles aceso seria afirmar uma coisa que ainda não
+       sabemos, e "offline" durante um segundo a cada recarregamento
+       lê-se como uma avaria. Melhor um espaço vazio: repara-se
+       menos, e não mente. */
+    body[data-duty="unknown"] .states,
+    body[data-duty="unknown"] .duty-bar,
+    body[data-duty="unknown"] #dutyNote{visibility:hidden}
+
+    /* O espaço fica reservado. Sem isto, o cabeçalho saltava quando
+       os botões aparecessem — e um salto de meio segundo depois de
+       carregar é mais irritante do que a espera. */
+    body[data-duty="unknown"] .states{min-height:38px}
+
+    .st{pointer-events:auto}
 
     .duty-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;
       background:var(--muted);transition:background .25s}

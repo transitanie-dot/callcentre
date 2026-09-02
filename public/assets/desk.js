@@ -1901,6 +1901,39 @@ function aplicarNome(meu) {
  * Agora pergunta. Se o servidor diz que este agente estava em Live,
  * retoma Live e volta a bater o ponto.
  */
+/**
+ * O estado tem de sair sempre de 'unknown'.
+ *
+ * Se o /api/admin/team falhar — e falha quando o serviço de drivers
+ * está a acordar — o painel ficava em 'unknown' para sempre. Com a
+ * regra de CSS que esbatia os botões nesse estado, isso deixava-os
+ * a parecer desativados sem nada o explicar.
+ *
+ * Agora há um limite: passados oito segundos assume-se offline, que
+ * é o estado seguro. Melhor mostrar offline e deixar clicar do que
+ * mostrar um limbo em que nada responde.
+ */
+setTimeout(function () {
+  if (document.body.getAttribute('data-duty') !== 'unknown') return;
+
+  // A presença não chegou. Isto acontece quando o serviço de
+  // drivers está a acordar, e pode levar dez segundos.
+  //
+  // Assume-se offline porque é o estado seguro — melhor não receber
+  // chamadas do que julgar que se está a receber. Mas só ao fim de
+  // oito segundos: até lá os botões estão escondidos, e um espaço
+  // vazio é mais honesto do que um estado inventado.
+  console.warn('[desk] presence never arrived — assuming offline.');
+
+  document.body.setAttribute('data-duty', 'offline');
+  desk.state = 'offline';
+  el('dutyNote').textContent = STATE_NOTES.offline;
+
+  qsa('.st').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-state') === 'offline');
+  });
+}, 8000);
+
 async function aplicarEstado(meu) {
   // Sem linha, ou offline: assume-se offline. É o estado seguro —
   // melhor não receber chamadas do que julgar que se está a

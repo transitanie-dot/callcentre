@@ -141,9 +141,10 @@
     <strong id="dutyCountNum">30</strong>
   </div>
 
-  <!-- O dia até agora. Quanto tempo em cada estado, a somar ao
-       vivo — o estado atual conta desde que começou. -->
-  <div class="daytime" id="dayTime"></div>
+  <!-- O dia até agora: tempo em cada estado e o que aconteceu.
+       Na mesma barra do estado de propósito — é onde o agente já
+       está a olhar quando pensa em como lhe está a correr o dia. -->
+  <div class="daybar" id="dayBar"></div>
 
   <button class="deskbar-alert hidden" id="deskAlert" type="button">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.9-5a8.2 8.2 0 0 1-.9-3.8 8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.2Z"/></svg>
@@ -165,9 +166,9 @@
       <div class="tab-group">Operations</div>
       <button class="tab-btn active" data-tab="bookingsTab">Bookings <span id="bookingsBadge"></span></button>
 
-      <div class="tab-group">Conversations</div>
-      <button class="tab-btn" data-tab="chatTab">Partner chat <span id="chatBadge"></span></button>
-      <button class="tab-btn" data-tab="supportTab">Customer support <span id="supportBadge"></span></button>
+      <div class="tab-group">Live chat</div>
+      <button class="tab-btn" data-tab="chatTab">Live chat <span id="chatBadge"></span></button>
+      <button class="tab-btn hidden" data-tab="supportTab">Customer support <span id="supportBadge"></span></button>
 
       <div class="tab-group">Money</div>
       <button class="tab-btn" data-tab="financeTab">Finance</button>
@@ -537,6 +538,23 @@
     </div>
 
     <div id="chatTab" class="panel">
+      <!-- Quem se está a atender. Três públicos com necessidades
+           diferentes: um cliente pergunta pela reserva, um motorista
+           pelo pagamento, uma agência pela comissão. Misturá-los na
+           mesma fila obriga o agente a mudar de cabeça a cada
+           conversa. -->
+      <div class="aud-tabs" id="audTabs">
+        <button class="aud-tab" data-aud="customers" type="button">
+          Customers <span class="aud-n hidden" id="audNCustomers">0</span>
+        </button>
+        <button class="aud-tab active" data-aud="drivers" type="button">
+          Drivers <span class="aud-n hidden" id="audNDrivers">0</span>
+        </button>
+        <button class="aud-tab" data-aud="agents" type="button">
+          Travel agents <span class="aud-n hidden" id="audNAgents">0</span>
+        </button>
+      </div>
+
       <div class="desk">
         <div class="desk-left">
           <div class="desk-status">

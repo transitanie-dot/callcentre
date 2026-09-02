@@ -1295,6 +1295,7 @@ async function loadDesk() {
 
     desk.capacity = cap || {};
     pintarMarcas();
+    pintarAudTabs();
     renderDesk();
 
     // O último chat pode ter fechado do lado do parceiro, ou outro
@@ -1928,6 +1929,114 @@ function marcaDe(c) {
   return c.brand || 'airportlink';
 }
 
+// ============================================================
+// PÚBLICOS
+//
+// Clientes, motoristas e agências. Um cliente pergunta pela
+// reserva, um motorista pelo pagamento, uma agência pela comissão
+// — misturá-los na mesma fila obriga o agente a mudar de cabeça a
+// cada conversa.
+//
+// Hoje só os motoristas têm fila própria: os clientes usam a
+// support_chats, noutro separador, e as agências ainda não têm
+// chat nenhum. As abas existem para quando tiverem, e as vazias
+// dizem-no em vez de fingirem uma fila.
+// ============================================================
+var audAtual = (function () {
+  try {
+    var g = localStorage.getItem('airportlink-desk-aud');
+    if (g) return g;
+  } catch (e) {}
+  return 'drivers';
+})();
+
+function pintarAudTabs() {
+  qsa('[data-aud]').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-aud') === audAtual);
+  });
+
+  // Os motoristas contam da fila que já existe. Os outros ficam a
+  // zero até terem fila própria.
+  var esperam = (desk.todas || desk.chats || []).filter(function (c) {
+    return !c.assigned_to && c.unread_for_admin > 0;
+  }).length;
+
+  var n = el('audNDrivers');
+  if (n && !n.__missing) {
+    n.textContent = esperam;
+    n.classList.toggle('hidden', !esperam);
+  }
+}
+
+qsa('[data-aud]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var qual = b.getAttribute('data-aud');
+    if (qual === audAtual) return;
+
+    audAtual = qual;
+    try { localStorage.setItem('airportlink-desk-aud', qual); } catch (e) {}
+
+    pintarAudTabs();
+
+    // Os clientes vivem noutro separador, com outras tabelas. Levar
+    // lá em vez de mostrar uma fila vazia é mais honesto do que
+    // fingir que a aba faz alguma coisa.
+    if (qual === 'customers') {
+      switchTab('supportTab');
+      return;
+    }
+
+    if (qual === 'agents') {
+      el('chatList').innerHTML =
+        '<div class="desk-blank" style="padding:40px 24px;text-align:center">' +
+        '<strong style="display:block;margin-bottom:8px">Travel agents do not have chat yet</strong>' +
+        '<span style="color:var(--muted);font-size:13.5px;line-height:1.6">' +
+        'They reach us by email for now. When agency chat exists, ' +
+        'it appears here.</span></div>';
+      return;
+    }
+
+    loadDesk();
+  });
+});
+
+/**
+ * Quem sou eu.
+ *
+ * O painel precisa do cargo antes de desenhar o menu: as finanças
+ * só aparecem a supervisores. A garantia real está nas rotas do
+ * servidor — isto é só para não mostrar portas fechadas.
+ */
+async function carregarCargo() {
+  try {
+    var eu = await deskFetch('/api/admin/me');
+    meuCargo = eu.role || 'agent';
+    souSupervisor = Boolean(eu.is_supervisor);
+  } catch (e) {
+    // Sem resposta assume-se agente: é o menos permissivo, e a
+    // rota recusaria na mesma se alguém tentasse.
+    meuCargo = 'agent';
+    souSupervisor = false;
+  }
+
+  aplicarCargo();
+}
+
+/** Esconde o que este cargo não pode ver. */
+function aplicarCargo() {
+  qsa('[data-tab]').forEach(function (b) {
+    var tab = b.getAttribute('data-tab');
+    // As finanças são só de supervisores. Esconder o botão não
+    // protege nada — quem quiser chama a rota — mas mostrar uma
+    // porta que se abre com um erro é pior do que não a mostrar.
+    if (tab === 'financeTab') {
+      b.classList.toggle('hidden', !souSupervisor);
+    }
+  });
+
+  document.body.setAttribute('data-role', meuCargo);
+}
+
 async function iniciarApoio() {
   /**
    * Um só pedido ao /api/admin/team.
@@ -1941,6 +2050,7 @@ async function iniciarApoio() {
    */
   var equipa = deskFetch('/api/admin/team').catch(function () { return null; });
   var atalhos = carregarSnips();
+  var cargo = carregarCargo();
 
   var team = await equipa;
   var meu = team && (team.team || []).find(function (t) {
@@ -1951,6 +2061,7 @@ async function iniciarApoio() {
   await aplicarEstado(meu);
 
   await atalhos;
+  await cargo;
 }
 
 /** O nome do servidor, se lá houver algum. */
@@ -2301,7 +2412,16 @@ function pintarDuty() {
   btn.style.setProperty('--duty-color', info.color);
   btn.classList.toggle('taking', Boolean(info.takes));
 
-  el('dutyMenu').innerHTML = STATES.map(function (st) {
+  // Quem está autenticado e com que cargo, no topo do menu. Numa
+  // equipa que partilha máquinas, é a primeira coisa a confirmar.
+  var cabeca = '<div class="duty-who">' +
+    '<b>' + escapeHtml(nomeAtual()) + '</b>' +
+    '<span>' + escapeHtml(adminEmail()) + '</span>' +
+    '<span class="duty-role' + (souSupervisor ? '' : ' agent') + '">' +
+    escapeHtml(souSupervisor ? 'Supervisor' : 'Agent') + '</span>' +
+    '</div>';
+
+  el('dutyMenu').innerHTML = cabeca + STATES.map(function (st) {
     // O active aparece mas não se clica: entra e sai sozinho.
     var tempo = tempoDoDia[st.key];
 
@@ -2355,6 +2475,10 @@ function pintarDuty() {
 
 function nomeAtual() {
   return deskDisplayName || adminName();
+}
+
+function adminEmail() {
+  return (currentAdmin && currentAdmin.user && currentAdmin.user.email) || '';
 }
 
 /**
@@ -2433,8 +2557,13 @@ document.addEventListener('click', function (e) {
 // senão apareceria a zero até se mudar dele.
 // ============================================================
 var tempoDoDia = {};
+var metricasDoDia = {};
 var diaTimer = null;
 var estadoDesde = Date.now();
+
+/** Quem sou eu, e com que cargo. */
+var meuCargo = 'agent';
+var souSupervisor = false;
 
 function duracao(seg) {
   var s = Math.max(0, Math.round(seg));
@@ -2449,18 +2578,19 @@ function duracao(seg) {
 async function carregarDia() {
   try {
     var res = await deskFetch('/api/admin/my-day');
-    tempoDoDia = {};
-    (res.states || []).forEach(function (r) {
-      tempoDoDia[r.state] = r.seconds || 0;
-    });
+    // O servidor passou a devolver um objeto por estado, em vez de
+    // uma lista: poupa um ciclo aqui e um agrupamento lá.
+    tempoDoDia = res.states || {};
+    metricasDoDia = res.metrics || {};
   } catch (e) {
     tempoDoDia = {};
+    metricasDoDia = {};
   }
   pintarDia();
 }
 
 function pintarDia() {
-  var caixa = el('dayTime');
+  var caixa = el('dayBar');
   if (!caixa || caixa.__missing) return;
 
   // O estado atual conta desde que começou, somado ao que já lá
@@ -2472,17 +2602,64 @@ function pintarDia() {
       Math.round((Date.now() - estadoDesde) / 1000);
   }
 
-  var linhas = STATES
-    .filter(function (st) { return vivo[st.key] > 0; })
-    .map(function (st) {
-      return '<span class="dt' + (st.key === desk.state ? ' now' : '') + '">' +
-        '<i style="background:' + st.color + '"></i>' +
-        escapeHtml(st.label) + ' <b>' + duracao(vivo[st.key]) + '</b></span>';
-    });
+  var m = metricasDoDia || {};
+  var partes = [];
 
-  caixa.innerHTML = linhas.length
-    ? linhas.join('')
-    : '<span class="dt">Nothing logged today yet</span>';
+  /**
+   * Os três estados que interessam sempre, mesmo a zero.
+   *
+   * Live, break e offline aparecem sempre: "zero minutos em break"
+   * é uma informação, e escondê-la faria a barra mudar de tamanho
+   * ao longo do dia. Os outros só aparecem quando houve tempo lá.
+   */
+  ['live', 'break', 'offline'].forEach(function (chave) {
+    var st = estadoInfo(chave);
+    partes.push(bloco(st.label, duracao(vivo[chave] || 0),
+      chave === desk.state, st.color));
+  });
+
+  STATES.forEach(function (st) {
+    if (['live', 'break', 'offline'].indexOf(st.key) !== -1) return;
+    if (!vivo[st.key]) return;
+    partes.push(bloco(st.label, duracao(vivo[st.key]),
+      st.key === desk.state, st.color));
+  });
+
+  // O que aconteceu, não só quanto tempo passou.
+  partes.push(bloco('Rang', m.rang || 0));
+  partes.push(bloco('Answered', m.answered || 0));
+  partes.push(bloco('Missed', m.missed || 0, false, null,
+    m.missed > 0 ? 'warn' : ''));
+  partes.push(bloco('Escalated', m.escalated || 0, false, null,
+    m.escalated > 0 ? 'warn' : ''));
+
+  partes.push(bloco('Avg answer',
+    m.avg_answer_seconds != null ? m.avg_answer_seconds + 's' : '—'));
+
+  // A taxa só ganha cor a partir de cinco chamadas. Uma perdida em
+  // duas dá 50% e não quer dizer nada — pintar isso de vermelho às
+  // nove da manhã é injusto e é ruído.
+  var taxa = m.answer_rate;
+  var corTaxa = '';
+
+  if (taxa != null && (m.rang || 0) >= 5) {
+    corTaxa = taxa >= 90 ? 'good' : (taxa >= 70 ? 'warn' : 'bad');
+  }
+
+  partes.push(bloco('Answer rate',
+    taxa != null ? taxa + '%' : '—', false, null, corTaxa));
+
+  caixa.innerHTML = partes.join('');
+}
+
+/** Um número da barra do dia. */
+function bloco(rotulo, valor, agora, cor, classe) {
+  return '<span class="db' + (agora ? ' now' : '') + '"' +
+    (cor ? ' style="--duty-color:' + cor + ';color:' + cor + '"' : '') + '>' +
+    (cor ? '<i style="background:' + cor + '"></i>' : '') +
+    '<span class="db-k">' + escapeHtml(rotulo) + '</span>' +
+    '<span class="db-v' + (classe ? ' ' + classe : '') + '">' +
+    escapeHtml(valor) + '</span></span>';
 }
 
 function arrancarDia() {
@@ -3662,12 +3839,28 @@ function sum(rows, field) {
 async function loadFinance() {
   el('finBody').innerHTML = '<tr><td colspan="8" class="loading-row">Loading...</td></tr>';
 
+  /**
+   * As finanças passam por uma função, não por leitura direta.
+   *
+   * A função verifica o cargo no servidor. As vistas deixaram de
+   * ser legíveis a quem não for supervisor — esconder o separador
+   * no painel não protegia nada, porque quem quisesse chamava-as
+   * da consola do browser.
+   */
+  var fin = function (nome) {
+    return client.rpc('finance_data', { p_view: nome })
+      .then(function (r) {
+        if (r.error) return { data: null, error: r.error };
+        return { data: (r.data || []).map(function (x) { return x; }), error: null };
+      });
+  };
+
   var results = await Promise.all([
-    client.from('finance_monthly').select('*'),
-    client.from('finance_by_airport').select('*'),
-    client.from('finance_by_partner').select('*'),
-    client.from('finance_by_agency').select('*'),
-    client.from('finance_reconciliation').select('*')
+    fin('finance_monthly'),
+    fin('finance_by_airport'),
+    fin('finance_by_partner'),
+    fin('finance_by_agency'),
+    fin('finance_reconciliation')
   ]);
 
   var names = ['months', 'airports', 'partners', 'agencies', 'recon'];

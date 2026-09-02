@@ -125,9 +125,16 @@ function adminName() {
 var bookingFilters = { bookingId:'', email:'', name:'', pickup:'', dropoff:'',
   dateFrom:'', dateTo:'', soldFrom:'', soldTo:'', status:'' };
 
-// Qual das vistas rápidas está escolhida. 'today-travel' por
-// omissão: quem abre o painel de manhã quer saber o que sai hoje.
-var quickView = 'today-travel';
+/**
+ * A vista com que o painel abre.
+ *
+ * Era 'today-travel' — quem sai hoje. Mas abrir e ver o que entrou
+ * de novo é a pergunta mais frequente: as viagens de hoje já foram
+ * tratadas de manhã, e as reservas novas ainda não viu ninguém.
+ *
+ * As outras vistas continuam a um clique.
+ */
+var quickView = 'all';
 var allBookings = [], bookingPage = 1, bookingPerPage = 50;
 var contacts = [], contactFilters = { search:'', searchId:'' }, contactPage = 1, contactPerPage = 50;
 var selectedContactBookings = [], selectedContactChats = [];
@@ -310,7 +317,20 @@ async function loadBookings(filters) {
   var tbody = el('bookingsList');
   tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Loading...</td></tr>';
 
-  var q = client.from('bookings').select(bookingSelect).order('booking_date', { ascending: false });
+  /**
+   * As mais recentes primeiro — pela data em que foram FEITAS.
+   *
+   * Ordenava por booking_date, que é o dia da viagem. Uma reserva
+   * feita hoje para daqui a três meses aparecia no topo, e uma
+   * feita há cinco minutos para amanhã ficava enterrada. Quem abre
+   * o painel quer ver o que entrou agora.
+   *
+   * A ordenação por data de viagem continua a existir nas vistas
+   * rápidas — "travelling today" ordena por essa, e faz sentido.
+   */
+  var ordem = filters.orderBy === 'travel' ? 'booking_date' : 'created_at';
+  var q = client.from('bookings').select(bookingSelect)
+    .order(ordem, { ascending: false });
   if (filters.bookingId) q = q.ilike('booking_id', '%' + filters.bookingId + '%');
   if (filters.email) q = q.ilike('email', '%' + filters.email + '%');
   if (filters.name) q = q.ilike('full_name', '%' + filters.name + '%');
@@ -2014,6 +2034,7 @@ el('deskName').addEventListener('click', async function () {
     deskDisplayName = name;
     try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
     paintDisplayName();
+    pintarDuty();
   } catch (e) {
     avisar('Heads up', e.message);
   }
@@ -2150,11 +2171,11 @@ el('chatUrgentBtn').addEventListener('click', async function () {
  * um chat e sai quando se larga o último.
  */
 var STATES = [
-  { key: 'live', label: 'Live', color: '#0F766E', takes: true,
+  { key: 'live', label: 'Live', color: '#16A34A', takes: true,
     note: 'Ready for chats. New ones can be assigned to you.' },
-  { key: 'active', label: 'Active', color: '#16A34A', takes: true, auto: true,
+  { key: 'active', label: 'Active', color: '#2563EB', takes: true, auto: true,
     note: 'You have chats open. This changes on its own as you take and close them.' },
-  { key: 'escalating', label: 'Escalating', color: '#B45309', takes: false,
+  { key: 'escalating', label: 'Escalating', color: '#C2410C', takes: false,
     note: 'Working something out with a supervisor. No new chats reach you, ' +
       'and the ones you have stay with you.' },
   { key: 'follow-up', label: 'Follow-up', color: '#7C3AED', takes: false,
@@ -2166,9 +2187,15 @@ var STATES = [
   { key: 'break', label: 'Break', color: '#D97706', takes: false,
     note: 'On a break. The chats you already have still work, and you still ' +
       'count as being on shift.' },
-  { key: 'offline', label: 'Offline', color: '#94A3B8', takes: false,
+  { key: 'offline', label: 'Offline', color: '#DC2626', takes: false,
     note: 'Off duty. You will not be given new chats.' }
 ];
+
+/** As duas primeiras iniciais de um nome, para o avatar. */
+function iniciais(nome) {
+  return String(nome || '?').trim().split(/\s+/).slice(0, 2)
+    .map(function (p) { return p[0]; }).join('').toUpperCase() || '?';
+}
 
 function estadoInfo(chave) {
   return STATES.find(function (s) { return s.key === chave; }) ||
@@ -2187,8 +2214,12 @@ var STATE_NOTES = (function () {
 function pintarDuty() {
   var info = estadoInfo(desk.state);
   var btn = el('dutyBtn');
+  var nome = deskDisplayName || adminName();
 
-  el('dutyLabel').textContent = desk.state === 'unknown' ? '—' : info.label;
+  el('dutyName').textContent = nome;
+  el('dutyAv').textContent = iniciais(nome);
+  el('dutyLabel').textContent = desk.state === 'unknown' ? 'Checking' : info.label;
+
   btn.style.setProperty('--duty-color', info.color);
   btn.classList.toggle('taking', Boolean(info.takes));
 

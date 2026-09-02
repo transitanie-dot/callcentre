@@ -72,7 +72,7 @@
       background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;
       align-items:center;justify-content:center}
     .head-btn:hover{color:var(--text);border-color:var(--primary)}
-    .head-btn.off{opacity:.45}
+    
     .head-btn svg{width:16px;height:16px}
     *{box-sizing:border-box}
     /* Sem 100vh: dentro de um iframe, 100vh é a altura da janela e
@@ -388,14 +388,7 @@
     .deskbar-name:hover{color:var(--text);border-color:var(--primary)}
     .deskbar-name svg{width:14px;height:14px}
     .deskbar-name.unset{color:var(--warn);border-color:var(--warn)}
-    .deskbar-locked{margin-left:auto;display:inline-flex;align-items:center;gap:8px;
-      background:var(--bad-bg);border:1px solid var(--bad);border-radius:999px;
-      padding:7px 14px;color:var(--bad);font-size:12.5px;font-weight:600;cursor:pointer}
-    .deskbar-locked svg{width:15px;height:15px}
-    .deskbar-locked.hidden + .deskbar-test{margin-left:auto}
-    .deskbar-test{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);
-      background:transparent;color:var(--muted);cursor:pointer;display:flex;
-      align-items:center;justify-content:center;flex:0 0 auto}
+    
     .deskbar-test:hover{color:var(--text);border-color:var(--primary)}
     .deskbar-test svg{width:16px;height:16px}
     .deskbar-alert{display:inline-flex;align-items:center;gap:9px;background:var(--warn-bg);
@@ -437,14 +430,7 @@
 
     /* E uma barra fina no topo da página, da cor do estado. É o
        sinal que se apanha sem olhar para nada em concreto. */
-    /* Enquanto o som estiver bloqueado, o aviso pulsa. Um agente que
-       não repare nisto perde chamadas e não percebe porquê. */
-    body.sound-locked .deskbar-locked{animation:sndPulse 1.6s ease-in-out infinite;
-      background:var(--warn-bg,#FDF6E7);color:var(--warn,#8A5A12);
-      box-shadow:0 0 0 1px var(--warn,#8A5A12)}
-    @keyframes sndPulse{0%,100%{opacity:1}50%{opacity:.55}}
-
-/* O aviso de demora. Três estados, cada um mais insistente: aos
+    /* O aviso de demora. Três estados, cada um mais insistente: aos
        três minutos avisa, aos cinco insiste, aos dez já foi escalado
        e diz-se isso — o agente tem de saber que o supervisor sabe. */
 /* ---------- caixas de diálogo ---------- */

@@ -1591,6 +1591,24 @@ async function pegarConversa(chatId) {
     return true;
   }
 
+  /**
+   * Pegar um chat estando offline é entrar ao serviço.
+   *
+   * Um agente offline que pega uma conversa está a trabalhar — dizer
+   * que está offline seria falso, e o pior é que o som e os avisos
+   * ficavam desligados enquanto ele atendia alguém.
+   *
+   * Só se aplica a offline e unknown. Quem está em break, training,
+   * admin ou escalating disse que está ocupado com outra coisa —
+   * pegar um chat não desfaz essa decisão, e o estado dele continua
+   * a descrever o que está mesmo a fazer.
+   *
+   * O ajustarActive, mais abaixo, arruma quem estava em live.
+   */
+  if (desk.state === 'offline' || desk.state === 'unknown') {
+    await setDeskState('active', true);
+  }
+
   try {
     await deskFetch('/api/admin/chat/claim', { chat_id: chatId });
   } catch (e) {
@@ -1654,9 +1672,9 @@ function paintChatOwnership(chat) {
   }
 
   el('chatClaimText').textContent = free
-    ? 'Nobody has taken this one. Read it, then take it if it is yours to answer.'
-    : 'Live with ' + (chat.assigned_agent_name || 'another agent') +
-      '. You can read along — take it over only if they have stepped away.';
+    ? 'Waiting for someone.'
+    : 'With ' + (chat.assigned_agent_name || 'another agent') +
+      '. You can read along.';
 
   el('chatTakeBtn').textContent = free ? 'Take this chat' : 'Take it over';
   el('chatTakeBtn').disabled = false;

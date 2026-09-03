@@ -2588,9 +2588,31 @@ function duracao(seg) {
   return s + 's';
 }
 
+/**
+ * Hoje, no fuso do agente.
+ *
+ * O current_date do Postgres é UTC. Às 23h45 no Recife já são
+ * 02h45 em UTC, e o painel dizia que o dia tinha acabado — com os
+ * tempos todos a zero enquanto o agente ainda estava a trabalhar.
+ *
+ * O browser sabe o fuso; o servidor não. Por isso é daqui que a
+ * data tem de vir.
+ */
+function hojeLocal() {
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
 async function carregarDia() {
   try {
-    var res = await deskFetch('/api/admin/my-day');
+    // O offset em minutos face a UTC. O getTimezoneOffset devolve
+    // +180 para UTC-3, por isso inverte-se o sinal.
+    var offset = -new Date().getTimezoneOffset();
+
+    var res = await deskFetch('/api/admin/my-day?day=' + hojeLocal() +
+      '&offset=' + offset);
     // O servidor passou a devolver um objeto por estado, em vez de
     // uma lista: poupa um ciclo aqui e um agrupamento lá.
     tempoDoDia = res.states || {};

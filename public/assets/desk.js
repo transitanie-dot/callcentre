@@ -1292,12 +1292,62 @@ async function deskFetch(path, body) {
   return data;
 }
 
+/**
+ * De onde vêm as conversas, conforme a aba.
+ *
+ * Os parceiros têm tabela própria; clientes e agências partilham a
+ * support_chats, separados pela coluna audience. As três filas têm
+ * a mesma forma, por isso o resto do painel não precisa de saber a
+ * diferença.
+ */
+/**
+ * As rotas mudam com a aba.
+ *
+ * Clientes e agências vivem noutra tabela, com funções próprias.
+ * Devolver o caminho certo aqui evita um "if" espalhado por cada
+ * sítio que pega, fecha ou larga uma conversa.
+ */
+function rotaDaAba(acao) {
+  var apoio = audAtual === 'customers' || audAtual === 'agents';
+
+  if (acao === 'claim') {
+    return apoio ? '/api/admin/support/claim' : '/api/admin/chat/claim';
+  }
+  if (acao === 'close') {
+    return apoio ? '/api/admin/support/close' : '/api/admin/chat/close';
+  }
+  return '/api/admin/chat/release';
+}
+
+function filaDaAba() {
+  if (audAtual === 'customers') {
+    return { url: '/api/admin/support-queue?audience=customer', tipo: 'support' };
+  }
+  if (audAtual === 'agents') {
+    return { url: '/api/admin/support-queue?audience=agency', tipo: 'support' };
+  }
+  return { url: '/api/admin/chats', tipo: 'partner' };
+}
+
 async function loadDesk() {
+  var fila = filaDaAba();
+
   try {
+    /**
+     * A fila da aba ativa.
+     *
+     * A de clientes e a de agências trazem a capacidade dentro da
+     * mesma resposta; a dos parceiros pede-a à parte, como sempre
+     * pediu. Uma chamada a menos é dois segundos a menos.
+     */
     var [queue, cap] = await Promise.all([
-      deskFetch('/api/admin/chats'),
-      deskFetch('/api/admin/capacity')
+      deskFetch(fila.url),
+      fila.tipo === 'support'
+        ? Promise.resolve(null)
+        : deskFetch('/api/admin/capacity')
     ]);
+
+    if (fila.tipo === 'support') cap = queue.capacity || {};
 
     // A resposta traz as conversas de TODAS as marcas: as abas
     // precisam de contar as filas das outras para mostrar o aviso.
@@ -1347,6 +1397,18 @@ async function loadDesk() {
   } catch (e) {
     el('chatList').innerHTML = '<div class="no-results">' + escapeHtml(e.message) + '</div>';
   }
+}
+
+/**
+ * Quem está do outro lado.
+ *
+ * Cada fila chama-lhe outra coisa: os parceiros têm trading_name,
+ * os clientes e as agências vêm com who já resolvido pela vista.
+ * Isto poupa um "if" em cada sítio que desenha um nome.
+ */
+function quemE(c) {
+  return (c && (c.who || c.trading_name || c.legal_name || c.full_name ||
+    c.email)) || 'Someone';
 }
 
 function renderDesk() {
@@ -1423,7 +1485,7 @@ function renderDesk() {
         return '<button class="chat-row urgent" data-chat="' + escapeHtml(c.chat_id) +
           '" type="button">' +
           '<div class="row-top"><strong>' +
-          escapeHtml(c.trading_name || c.legal_name || 'Partner') +
+          escapeHtml(quemE(c)) +
           '</strong><span class="when">' + (c.escalated_minutes || 0) + 'm</span></div>' +
           // A nota vem no formato "Escalated by Rick: o que se passa".
           // Separa-se aqui em vez de guardar o nome numa coluna
@@ -1478,7 +1540,7 @@ function renderDesk() {
       (c.awaiting_reply_minutes >= 5 ? ' late' : '') +
       '" data-chat="' + escapeHtml(c.chat_id) + '" type="button">' +
       '<div class="top"><span class="nm">' +
-      escapeHtml(c.trading_name || c.legal_name || c.email) + '</span>' +
+      escapeHtml(quemE(c)) + '</span>' +
       '<span class="ago">' + escapeHtml(agoLabel(c.minutes_since)) + '</span></div>' +
       '<div class="snip">' + escapeHtml(c.last_message_text || 'No messages yet') + '</div>' +
       (tags.length ? '<div class="tags">' + tags.join('') + '</div>' : '') +
@@ -1510,7 +1572,7 @@ function renderDesk() {
         return '<button class="chat-row" data-closed="' + escapeHtml(c.chat_id) +
           '" type="button">' +
           '<div class="row-top"><strong>' +
-          escapeHtml(c.trading_name || c.legal_name || c.email || 'Partner') +
+          escapeHtml(quemE(c)) +
           '</strong><span class="when">' + escapeHtml(dataCurta(c.closed_at)) +
           '</span></div>' +
           '<div class="snip">' + escapeHtml(c.last_message_text || '') + '</div>' +
@@ -1691,7 +1753,7 @@ async function pegarConversa(chatId) {
   }
 
   try {
-    await deskFetch('/api/admin/chat/claim', { chat_id: chatId });
+    await deskFetch(rotaDaAba('claim'), { chat_id: chatId });
   } catch (e) {
     await loadDesk();
 
@@ -2281,31 +2343,15 @@ qsa('[data-aud]').forEach(function (b) {
 
     pintarAudTabs();
 
-    // Os clientes vivem noutro separador, com outras tabelas. Levar
-    // lá em vez de mostrar uma fila vazia é mais honesto do que
-    // fingir que a aba faz alguma coisa.
-    if (qual === 'customers') {
-      switchTab('supportTab');
-      pintarAudTabs();
-      return;
-    }
-
     if (qual === 'escalated') {
       switchTab('chatTab');
       carregarEscaladas();
       return;
     }
 
-    if (qual === 'agents') {
-      el('chatList').innerHTML =
-        '<div class="desk-blank" style="padding:40px 24px;text-align:center">' +
-        '<strong style="display:block;margin-bottom:8px">Travel agents do not have chat yet</strong>' +
-        '<span style="color:var(--muted);font-size:13.5px;line-height:1.6">' +
-        'They reach us by email for now. When agency chat exists, ' +
-        'it appears here.</span></div>';
-      return;
-    }
-
+    // Clientes e agências têm fila própria, com a mesma forma da
+    // dos parceiros. O separador é o mesmo — o que muda é de onde
+    // vêm as conversas.
     switchTab('chatTab');
     loadDesk();
   });
@@ -2678,7 +2724,7 @@ el('closeGo').addEventListener('click', async function () {
   }
 
   try {
-    await deskFetch('/api/admin/chat/close', {
+    await deskFetch(rotaDaAba('close'), {
       chat_id: desk.current,
       reason: fecho.motivo,
       note: el('closeNote').value.trim() || null

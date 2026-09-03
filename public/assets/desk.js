@@ -2648,8 +2648,6 @@ function pintarDuty() {
 
   el('dutyMenu').innerHTML = cabeca + STATES.map(function (st) {
     // O active aparece mas não se clica: entra e sai sozinho.
-    var tempo = tempoDoDia[st.key];
-
     var nome = st.label;
 
     if (st.contagem) {
@@ -2659,12 +2657,24 @@ function pintarDuty() {
       nome += ' ' + abertos + '/3';
     }
 
+    /**
+     * O tempo só no estado ATUAL.
+     *
+     * Aparecia em todos, com o total do dia — e "Live 3h20" ao lado
+     * de uma opção que não está escolhida lê-se como se estivesse
+     * em Live há três horas. O total do dia já está na barra da
+     * direita, que é onde faz sentido.
+     */
+    var agora = st.key === desk.state
+      ? duracao(Math.round((Date.now() - estadoDesde) / 1000))
+      : null;
+
     return '<button class="duty-opt' + (st.key === desk.state ? ' on' : '') +
       (st.auto ? ' auto' : '') + '" data-duty-opt="' + st.key + '" type="button"' +
       (st.auto ? ' disabled' : '') + '>' +
       '<span class="dot" style="background:' + st.color + '"></span>' +
       escapeHtml(nome) +
-      (tempo ? '<small>' + duracao(tempo) + '</small>' : '') +
+      (agora ? '<small>' + agora + '</small>' : '') +
       '</button>' +
       (st.key === 'admin' ? '<div class="duty-sep"></div>' : '');
   }).join('');
@@ -2981,6 +2991,49 @@ function pedirEscolha() {
 
 async function setDeskState(state, aRetomar, desdeQuando) {
   var previous = desk.state;
+
+  /**
+   * O servidor decide primeiro; o ecrã muda depois.
+   *
+   * Estava ao contrário: o painel punha-se no estado novo e só
+   * depois perguntava. Quando a resposta era uma recusa — tentar
+   * ficar offline com conversas abertas — o agente via-se offline
+   * durante o segundo que a mensagem de erro demorava a aparecer.
+   *
+   * Um painel que mostra um estado que o servidor recusou é pior
+   * do que um que demora um segundo a mudar.
+   */
+  try {
+    await deskFetch('/api/admin/presence', {
+      state: state,
+      // O nome escolhido, não o email. O servidor faz upsert nesta
+      // coluna, por isso mandar adminName() aqui apagava o nome
+      // definido — a cada mudança de estado e a cada batida do ponto.
+      display_name: deskDisplayName || adminName(),
+      // O servidor guarda se foi escolha do agente ou decisão do
+      // sistema. No relatório, "meia hora em break" e "meia hora
+      // em break porque ninguém escolheu" não são a mesma coisa.
+      automatic: Boolean(aRetomar)
+    });
+  } catch (e) {
+    /**
+     * A mudança foi recusada.
+     *
+     * O caso real é tentar ficar offline com conversas abertas: elas
+     * ficariam com o nome de quem já não está lá, e não voltam à
+     * fila sozinhas.
+     *
+     * Nada mudou no ecrã, por isso não há nada a repor.
+     */
+    var titulo = /open|conversation/i.test(e.message)
+      ? 'You still have chats open'
+      : 'Could not change your status';
+
+    await avisar(titulo, e.message);
+    return;
+  }
+
+  // A partir daqui o servidor já aceitou.
   desk.state = state;
 
   if (state !== 'offline') el('wentOffline').classList.add('hidden');
@@ -3016,7 +3069,7 @@ async function setDeskState(state, aRetomar, desdeQuando) {
    * serviço fica com o som pronto no mesmo instante, sem ter de
    * clicar noutro sítio qualquer primeiro.
    */
-  if (state === 'live') {
+  if (state === 'live' || state === 'active') {
     unlockAudio();
     // Uma nota curta a confirmar que o som funciona. É a diferença
     // entre saber que está pronto e descobrir na primeira chamada
@@ -3030,41 +3083,6 @@ async function setDeskState(state, aRetomar, desdeQuando) {
     // Em pausa ou offline não há chamada a tocar. Se estava a
     // insistir, para agora.
     stopAlarm();
-  }
-
-  try {
-    // O nome escolhido, não o email. O servidor faz upsert nesta
-    // coluna, por isso mandar adminName() aqui apagava o nome
-    // definido — a cada mudança de estado e a cada batida do ponto.
-    await deskFetch('/api/admin/presence', {
-      state: state,
-      display_name: deskDisplayName || adminName(),
-      // O servidor guarda se foi escolha do agente ou decisão do
-      // sistema. No relatório, "meia hora em break" e "meia hora
-      // em break porque ninguém escolheu" não são a mesma coisa.
-      automatic: Boolean(aRetomar)
-    });
-  } catch (e) {
-    /**
-     * A mudança foi recusada.
-     *
-     * O caso real é tentar ficar offline com conversas abertas: elas
-     * ficariam com o nome de quem já não está lá, e não voltam à
-     * fila sozinhas.
-     *
-     * A mensagem do servidor já diz o que fazer — fechar ou passar
-     * a outro — por isso mostra-se tal e qual.
-     */
-    var titulo = /open|conversation/i.test(e.message)
-      ? 'You still have chats open'
-      : 'Could not change your status';
-
-    await avisar(titulo, e.message);
-
-    desk.state = previous;
-    pintarDuty();
-    el('dutyNote').textContent = STATE_NOTES[previous] || '';
-    return;
   }
 
   if (desk.heartbeat) { clearInterval(desk.heartbeat); desk.heartbeat = null; }
@@ -5741,7 +5759,12 @@ qsa('.modal-tab').forEach(function (tab) {
 
 // Qual está aberto. O aviso de chat precisa de saber, para se calar
 // quando alguém já está a olhar para ele.
-var activeTab = 'bookingsTab';
+// O painel abre nas conversas, não nas reservas.
+//
+// As reservas consultam-se quando é preciso; uma conversa à espera
+// tem de ser vista agora. Abrir no separador errado é começar o
+// turno com um clique desperdiçado.
+var activeTab = 'chatTab';
 
 /**
  * O que está à espera em cada separador.

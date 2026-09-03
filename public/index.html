@@ -549,14 +549,33 @@
            conversa. -->
       <div class="aud-tabs" id="audTabs">
         <button class="aud-tab" data-aud="customers" type="button">
-          Customers <span class="aud-n hidden" id="audNCustomers">0</span>
+          <span class="aud-dot"></span>Customers
+          <span class="aud-n hidden" id="audNCustomers">0</span>
         </button>
         <button class="aud-tab active" data-aud="drivers" type="button">
-          Drivers <span class="aud-n hidden" id="audNDrivers">0</span>
+          <span class="aud-dot"></span>Drivers
+          <span class="aud-n hidden" id="audNDrivers">0</span>
         </button>
         <button class="aud-tab" data-aud="agents" type="button">
-          Travel agents <span class="aud-n hidden" id="audNAgents">0</span>
+          <span class="aud-dot"></span>Travel agents
+          <span class="aud-n hidden" id="audNAgents">0</span>
         </button>
+      </div>
+
+      <!-- A mesma pesquisa que o separador de clientes tem.
+           Um agente que atenda os três públicos não devia ter de
+           mudar de método conforme quem está do outro lado. -->
+      <div class="desk-search">
+        <input type="text" id="deskSearch" class="search-input"
+               placeholder="Company, email, ticket or message">
+        <select id="deskSearchState" class="search-input">
+          <option value="">Any status</option>
+          <option value="waiting">Waiting for someone</option>
+          <option value="mine">Mine</option>
+          <option value="taken">With another agent</option>
+          <option value="late">Unanswered 3 min or more</option>
+        </select>
+        <button class="clear-btn" id="deskSearchClear" type="button">Clear</button>
       </div>
 
       <div class="desk">

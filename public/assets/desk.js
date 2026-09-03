@@ -2533,7 +2533,9 @@ var STATES = [
     note: 'Working something out with a supervisor. No new chats reach you, ' +
       'and the ones you have stay with you.' },
   { key: 'follow-up', label: 'Follow-up', color: '#7C3AED', takes: false,
-    note: 'Chasing something that came out of a conversation. No new chats.' },
+    note: 'Wrapping up. No new chats reach you, and the ones you have stay ' +
+      'with you — use it in the last minutes of a shift so nothing starts ' +
+      'that you cannot finish.' },
   { key: 'training', label: 'Training', color: '#0891B2', takes: false,
     note: 'In training. You still count as on shift.' },
   { key: 'admin', label: 'Admin', color: '#64748B', takes: false,
@@ -2542,7 +2544,9 @@ var STATES = [
     note: 'On a break. The chats you already have still work, and you still ' +
       'count as being on shift.' },
   { key: 'offline', label: 'Offline', color: '#DC2626', takes: false,
-    note: '' }
+    // Sem nota: o estado diz-se sozinho. Mas há uma regra que
+    // convém saber antes de tentar.
+    note: 'You cannot go offline while you still have chats open.' }
 ];
 
 // ============================================================
@@ -3041,10 +3045,25 @@ async function setDeskState(state, aRetomar, desdeQuando) {
       automatic: Boolean(aRetomar)
     });
   } catch (e) {
-    avisar('Heads up', e.message);
+    /**
+     * A mudança foi recusada.
+     *
+     * O caso real é tentar ficar offline com conversas abertas: elas
+     * ficariam com o nome de quem já não está lá, e não voltam à
+     * fila sozinhas.
+     *
+     * A mensagem do servidor já diz o que fazer — fechar ou passar
+     * a outro — por isso mostra-se tal e qual.
+     */
+    var titulo = /open|conversation/i.test(e.message)
+      ? 'You still have chats open'
+      : 'Could not change your status';
+
+    await avisar(titulo, e.message);
+
     desk.state = previous;
     pintarDuty();
-    el('dutyNote').textContent = STATE_NOTES[previous];
+    el('dutyNote').textContent = STATE_NOTES[previous] || '';
     return;
   }
 

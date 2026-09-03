@@ -99,6 +99,55 @@
      um iframe com sandbox — que é o caso no Wix. Não davam erro:
      devolviam null em silêncio, como se a pessoa tivesse cancelado.
      Daí "escrevi o nome e não gravou". -->
+<!-- Como a conversa acabou.
+     Um botão só, sem pergunta, fazia "resolvido" e "o parceiro
+     desapareceu" contarem o mesmo no relatório. -->
+<div class="ask-back" id="closeBack" hidden>
+  <div class="ask" role="dialog" aria-modal="true" aria-labelledby="closeTitle">
+    <h3 id="closeTitle">How did this end?</h3>
+    <p>This is what the report counts. Nothing is deleted either way &mdash;
+    the conversation moves to past chats and reopens if they write again.</p>
+
+    <div class="why-list">
+      <button class="why on" data-why="resolved" type="button">
+        <b>Resolved</b><span>They got what they needed.</span>
+      </button>
+      <button class="why" data-why="no_reply" type="button">
+        <b>No reply</b><span>They stopped answering. Nothing left to do here.</span>
+      </button>
+      <button class="why" data-why="duplicate" type="button">
+        <b>Duplicate</b><span>Another conversation covers the same thing.</span>
+      </button>
+    </div>
+
+    <textarea id="closeNote" rows="2" maxlength="400"
+      placeholder="Anything worth knowing later (optional)"></textarea>
+
+    <div class="ask-btns">
+      <button class="clear-btn" id="closeCancel" type="button">Cancel</button>
+      <button class="search-btn" id="closeGo" type="button">Close conversation</button>
+    </div>
+  </div>
+</div>
+
+<!-- Escalar não é fechar: a conversa continua aberta e passa para
+     outra pessoa. -->
+<div class="ask-back" id="escBack" hidden>
+  <div class="ask" role="dialog" aria-modal="true" aria-labelledby="escTitle">
+    <h3 id="escTitle">Escalate to a supervisor</h3>
+    <p>The conversation stays open and moves to whoever is free. You come off
+    it, and the partner keeps waiting on the same thread.</p>
+
+    <textarea id="escNote" rows="3" maxlength="600"
+      placeholder="What does the supervisor need to know? What was tried?"></textarea>
+
+    <div class="ask-btns">
+      <button class="clear-btn" id="escCancel" type="button">Cancel</button>
+      <button class="search-btn" id="escGo" type="button">Escalate</button>
+    </div>
+  </div>
+</div>
+
 <div class="ask-back" id="askBack" hidden>
   <div class="ask" role="dialog" aria-modal="true" aria-labelledby="askTitle">
     <h3 id="askTitle">Confirm</h3>
@@ -573,6 +622,7 @@
           <option value="mine">Mine</option>
           <option value="taken">With another agent</option>
           <option value="late">Unanswered 3 min or more</option>
+          <option value="closed">Closed by me</option>
         </select>
         <button class="clear-btn" id="deskSearchClear" type="button">Clear</button>
       </div>
@@ -618,6 +668,12 @@
             </div>
           </div>
 
+          <button class="desk-back" id="deskBack" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+            All conversations
+          </button>
+
           <div class="hidden" id="chatOpen" style="display:flex;flex-direction:column;height:100%">
             <div class="desk-head">
               <div>
@@ -638,6 +694,7 @@
               </div>
               <div class="desk-actions">
                 <button class="clear-btn" id="chatHistBtn" type="button">Past chats</button>
+                <button class="clear-btn hidden" id="chatEscalateBtn" type="button">Escalate</button>
                 <button class="doc-no hidden" id="chatUrgentBtn" type="button">Flag urgent</button>
                 <button class="doc-ok hidden" id="chatCloseBtn" type="button">Close chat</button>
                 <button class="clear-btn hidden" id="chatReleaseBtn" type="button">Hand back</button>

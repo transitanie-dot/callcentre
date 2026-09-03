@@ -164,10 +164,10 @@
 <div class="body-wrap">
     <nav class="tabs" aria-label="Sections">
       <div class="tab-group">Operations</div>
-      <button class="tab-btn active" data-tab="bookingsTab">Bookings <span id="bookingsBadge"></span></button>
+      <button class="tab-btn" data-tab="bookingsTab">Bookings <span id="bookingsBadge"></span></button>
 
       <div class="tab-group">Live chat</div>
-      <button class="tab-btn" data-tab="chatTab">Live chat <span id="chatBadge"></span></button>
+      <button class="tab-btn active" data-tab="chatTab">Live chat <span id="chatBadge"></span></button>
       <button class="tab-btn hidden" data-tab="supportTab">Customer support <span id="supportBadge"></span></button>
 
       <div class="tab-group">Money</div>
@@ -188,7 +188,7 @@
 
     <div class="content">
 
-    <div id="bookingsTab" class="panel active">
+    <div id="bookingsTab" class="panel">
       <div class="quick-views" id="quickViews">
         <button class="qv" data-view="today-travel" type="button">
           <span class="qv-n" id="qvTravel">0</span>
@@ -545,7 +545,7 @@
      Estavam dentro do chatTab, e mudar para clientes escondia o
      painel inteiro — levando as abas consigo. Ficava-se sem forma
      de voltar. -->
-<div class="aud-tabs hidden" id="audTabs">
+<div class="aud-tabs" id="audTabs">
   <button class="aud-tab" data-aud="customers" type="button">
     <span class="aud-dot"></span>Customers
     <span class="aud-n hidden" id="audNCustomers">0</span>
@@ -560,7 +560,7 @@
   </button>
 </div>
 
-    <div id="chatTab" class="panel">
+    <div id="chatTab" class="panel active">
       <!-- A mesma pesquisa que o separador de clientes tem.
            Um agente que atenda os três públicos não devia ter de
            mudar de método conforme quem está do outro lado. -->

@@ -1457,6 +1457,29 @@ function renderDesk() {
       '</span></div>' + outras.map(cartao).join('');
   }
 
+  /**
+   * As que fechei, no fim.
+   *
+   * Não aparecem por omissão — só com o filtro em "closed". Uma
+   * lista de trabalho não deve ter dentro o que já está feito, mas
+   * também não devia ser preciso ir a outro lado para o encontrar.
+   */
+  if (el('deskSearchState').value === 'closed' && fechadas.length) {
+    html += '<div class="list-head">Closed by me <span>' + fechadas.length +
+      '</span></div>' + fechadas.map(function (c) {
+        return '<button class="chat-row" data-closed="' + escapeHtml(c.chat_id) +
+          '" type="button">' +
+          '<div class="row-top"><strong>' +
+          escapeHtml(c.trading_name || c.legal_name || c.email || 'Partner') +
+          '</strong><span class="when">' + escapeHtml(dataCurta(c.closed_at)) +
+          '</span></div>' +
+          '<div class="snip">' + escapeHtml(c.last_message_text || '') + '</div>' +
+          '<div class="tags"><span class="tag">' +
+          escapeHtml(String(c.closed_reason || 'closed').replace(/_/g, ' ')) +
+          '</span></div></button>';
+      }).join('');
+  }
+
   // Com filtro ativo, uma lista vazia tem de dizer porquê. Sem
   // isto parecia que não havia conversas nenhumas.
   if (!html) {
@@ -1475,6 +1498,16 @@ function renderDesk() {
       renderDesk();
     });
   }
+
+  // Uma conversa fechada abre em leitura, com o fio completo.
+  qsa('[data-closed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      lerConversa(b.getAttribute('data-closed'));
+      el('histPanel').hidden = false;
+      el('histRead').hidden = false;
+      el('histWho').textContent = 'Closed conversation';
+    });
+  });
 
   qsa('[data-chat]').forEach(function (b) {
     b.addEventListener('click', function () { openDeskChat(b.getAttribute('data-chat')); });
@@ -1508,6 +1541,10 @@ async function openDeskChat(chatId) {
 
   el('chatBlank').classList.add('hidden');
   el('chatOpen').classList.remove('hidden');
+  // No telemóvel, a lista sai do caminho quando se abre uma
+  // conversa: lado a lado num ecrã de 380px dá 190px para cada, e
+  // nenhuma das duas funciona nesse espaço.
+  document.body.classList.add('chat-open');
   // O histórico é do parceiro anterior; trocar de conversa fecha-o.
   el('histPanel').hidden = true;
   el('histRead').hidden = true;
@@ -1660,6 +1697,9 @@ function paintChatOwnership(chat) {
 
   el('chatUrgentBtn').classList.toggle('hidden', !mine);
   el('chatCloseBtn').classList.toggle('hidden', !mine);
+  // Escalar é passar uma conversa MINHA a outra pessoa. Não faz
+  // sentido em conversas que não tenho.
+  el('chatEscalateBtn').classList.toggle('hidden', !mine);
   el('chatReleaseBtn').classList.toggle('hidden', !mine);
   el('chatUrgentBtn').textContent = chat.urgent ? 'Remove urgent' : 'Flag urgent';
 
@@ -2066,13 +2106,23 @@ function filtrarConversas(lista) {
     if (estado === 'mine') return c.assigned_to === adminId();
     if (estado === 'taken') return c.assigned_to && c.assigned_to !== adminId();
     if (estado === 'late') return (c.awaiting_reply_minutes || 0) >= 3;
+    // 'closed' esconde as abertas: as fechadas vêm de outra lista.
+    if (estado === 'closed') return false;
 
     return true;
   });
 }
 
 el('deskSearch').addEventListener('input', renderDesk);
-el('deskSearchState').addEventListener('change', renderDesk);
+el('deskSearchState').addEventListener('change', function () {
+  // Escolher "closed" vai buscá-las: não se carregam sempre, porque
+  // são muitas e raramente se olha para elas.
+  if (el('deskSearchState').value === 'closed' && !fechadas.length) {
+    carregarFechadas();
+  } else {
+    renderDesk();
+  }
+});
 
 el('deskSearchClear').addEventListener('click', function () {
   el('deskSearch').value = '';
@@ -2442,6 +2492,12 @@ el('chatReply').addEventListener('blur', function () {
 });
 
 // ---------- histórico ----------
+el('deskBack').addEventListener('click', function () {
+  // Volta à lista no telemóvel. A conversa continua aberta — só
+  // sai da frente.
+  document.body.classList.remove('chat-open');
+});
+
 el('chatHistBtn').addEventListener('click', function () {
   var chat = desk.chats.find(function (c) { return c.chat_id === desk.current; });
   if (!chat) return;
@@ -2457,10 +2513,64 @@ el('histBack').addEventListener('click', function () {
   el('histRead').hidden = true;
 });
 
-el('chatCloseBtn').addEventListener('click', async function () {
-  // Os trinta segundos arrancam ao fechar, não à resposta do
-  // servidor: a decisão é do agente e já foi tomada.
-  setTimeout(pedirEscolha, 400);
+// ============================================================
+// COMO A CONVERSA ACABOU
+//
+// Era um botão sem pergunta. "Resolvido" e "o parceiro
+// desapareceu" contavam o mesmo no relatório, e não são a mesma
+// coisa de todo — uma diz que o serviço funcionou, a outra que
+// alguém ficou por atender.
+// ============================================================
+var fecho = { motivo: 'resolved' };
+var fechadas = [];
+
+/**
+ * As conversas que fechei.
+ *
+ * A fila só traz as abertas e as das últimas 24 horas — uma
+ * conversa fechada ontem desaparecia de todo lado.
+ */
+async function carregarFechadas() {
+  try {
+    var r = await deskFetch('/api/admin/chats/closed');
+    fechadas = r.chats || [];
+  } catch (e) {
+    fechadas = [];
+  }
+  renderDesk();
+}
+
+el('chatCloseBtn').addEventListener('click', function () {
+  if (!desk.current) return;
+
+  fecho.motivo = 'resolved';
+  el('closeNote').value = '';
+
+  qsa('[data-why]').forEach(function (b) {
+    b.classList.toggle('on', b.getAttribute('data-why') === 'resolved');
+  });
+
+  el('closeBack').hidden = false;
+});
+
+qsa('[data-why]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    fecho.motivo = b.getAttribute('data-why');
+    qsa('[data-why]').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+  });
+});
+
+el('closeCancel').addEventListener('click', function () {
+  el('closeBack').hidden = true;
+});
+
+el('closeGo').addEventListener('click', async function () {
+  if (!desk.current) return;
+
+  el('closeBack').hidden = true;
+  el('closeGo').disabled = true;
+
   // Congela o cronómetro no valor final antes de qualquer pedido:
   // se a rede demorar, o número mostrado é o do momento em que
   // carregaste e não o da resposta do servidor.
@@ -2469,18 +2579,91 @@ el('chatCloseBtn').addEventListener('click', async function () {
     pararRelogio();
     pintarRelogio();
   }
-  if (!desk.current) return;
-  if (!await perguntar('Close conversation', 'Close this conversation?\n\nIt frees your slot. The partner can ' +
-      'write again any time and it reopens.')) return;
 
-  await deskFetch('/api/admin/chat/release', { chat_id: desk.current, close: true });
+  try {
+    await deskFetch('/api/admin/chat/close', {
+      chat_id: desk.current,
+      reason: fecho.motivo,
+      note: el('closeNote').value.trim() || null
+    });
+  } catch (e) {
+    el('closeGo').disabled = false;
+    return avisar('Could not close it', e.message);
+  }
+
+  el('closeGo').disabled = false;
+
+  // Os trinta segundos arrancam depois de fechar, não antes: a
+  // decisão já foi tomada e o slot já está livre.
+  setTimeout(pedirEscolha, 400);
+
   desk.current = null;
   pararRelogio();
   el('chatClock').hidden = true;
   el('chatOpen').classList.add('hidden');
   el('chatBlank').classList.remove('hidden');
+  document.body.classList.remove('chat-open');
+
   await loadDesk();
+  carregarFechadas();
 });
+
+// ============================================================
+// ESCALAR
+//
+// Não é fechar. A conversa continua aberta e passa para outra
+// pessoa. Fechar por não saber responder seria a pior saída: o
+// parceiro fica sem resposta e o problema desaparece do relatório.
+// ============================================================
+el('chatEscalateBtn').addEventListener('click', function () {
+  if (!desk.current) return;
+  el('escNote').value = '';
+  el('escBack').hidden = false;
+  setTimeout(function () { el('escNote').focus(); }, 40);
+});
+
+el('escCancel').addEventListener('click', function () {
+  el('escBack').hidden = true;
+});
+
+el('escGo').addEventListener('click', async function () {
+  var nota = el('escNote').value.trim();
+
+  if (!nota) {
+    return avisar('Say what happened',
+      'Escalating without context means whoever picks it up starts from ' +
+      'nothing — and the partner explains everything twice.');
+  }
+
+  el('escGo').disabled = true;
+
+  try {
+    var r = await deskFetch('/api/admin/chat/escalate', {
+      chat_id: desk.current,
+      note: nota
+    });
+
+    el('escBack').hidden = true;
+
+    await avisar('Escalated', r.back_to_queue
+      ? 'No supervisor was free, so it went back to the queue. Somebody will ' +
+        'pick it up.'
+      : 'It is with a supervisor now. You are off this one.');
+
+    desk.current = null;
+    pararRelogio();
+    el('chatOpen').classList.add('hidden');
+    el('chatBlank').classList.remove('hidden');
+    document.body.classList.remove('chat-open');
+
+    await loadDesk();
+  } catch (e) {
+    avisar('Could not escalate', e.message);
+  } finally {
+    el('escGo').disabled = false;
+  }
+});
+
 
 el('chatReleaseBtn').addEventListener('click', async function () {
   if (!desk.current) return;

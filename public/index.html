@@ -607,6 +607,14 @@
     <span class="aud-dot"></span>Travel agents
     <span class="aud-n hidden" id="audNAgents">0</span>
   </button>
+
+  <!-- Só supervisores. Uma conversa escalada vive aqui e não na
+       fila normal: se lá ficasse, um agente podia pegá-la outra vez
+       e o parceiro explicava tudo pela terceira vez. -->
+  <button class="aud-tab hidden" data-aud="escalated" id="audTabEsc" type="button">
+    <span class="aud-dot"></span>De-escalation
+    <span class="aud-n hidden" id="audNEsc">0</span>
+  </button>
 </div>
 
     <div id="chatTab" class="panel active">

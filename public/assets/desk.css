@@ -88,8 +88,10 @@
       background:var(--card);border-bottom:1px solid var(--border)}
     .header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;
       display:flex;align-items:center;gap:11px}
-    .header h1::before{content:"";width:9px;height:9px;border-radius:999px;
-      background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+    /* O ponto verde ao lado do título foi removido de propósito.
+       Era decoração, mas um ponto verde num painel de operações
+       lê-se como "estou online" — e aparecia mesmo com o agente
+       offline. Um sinal que mente é pior do que sinal nenhum. */
     .who{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
 
     /* navegação lateral: numa consola usada o dia todo, um menu
@@ -1103,11 +1105,39 @@
   padding:14px 18px 13px;white-space:nowrap;flex:0 0 auto;
   display:inline-flex;align-items:center;gap:9px;transition:color .15s ease}
 .aud-tab:hover{color:var(--text)}
-.aud-tab.active{color:var(--text)}
-.aud-tab::after{content:"";position:absolute;left:14px;right:14px;bottom:0;
-  height:2.5px;border-radius:2px 2px 0 0;background:transparent;
-  transition:background .18s ease}
-.aud-tab.active::after{background:var(--accent)}
+/* A aba onde se está tem de ser óbvia. Um sublinhado fino não
+   chegava: com três abas parecidas, quem olha de relance não sabe
+   onde está. Agora o fundo muda também. */
+.aud-tab.active{color:var(--text);background:var(--bg)}
+.aud-tab::after{content:"";position:absolute;left:0;right:0;bottom:0;
+  height:3px;background:transparent;transition:background .18s ease}
+
+/**
+ * A cor diz o estado da fila, não qual a aba.
+ *
+ *   verde   nada à espera, está tudo respondido
+ *   azul    conversas em curso, atribuídas a alguém
+ *   laranja alguém à espera de resposta
+ *
+ * O laranja ganha sempre: uma fila com gente à espera e conversas
+ * em curso ao mesmo tempo é uma fila com gente à espera.
+ */
+.aud-tab.active::after{background:#16A34A}
+.aud-tab.active.busy::after{background:#2563EB}
+.aud-tab.active.waiting::after{background:#EA580C}
+
+/* E o ponto ao lado do nome, para se ver o estado das abas que não
+   estão abertas. */
+.aud-dot{width:8px;height:8px;border-radius:999px;flex:0 0 auto;
+  background:#16A34A;opacity:.55;transition:background .2s ease}
+.aud-tab.active .aud-dot{opacity:1}
+.aud-tab.busy .aud-dot{background:#2563EB}
+.aud-tab.waiting .aud-dot{background:#EA580C;opacity:1;
+  animation:audPulse 1.6s ease-in-out infinite}
+@keyframes audPulse{0%,100%{opacity:1}50%{opacity:.4}}
+@media (prefers-reduced-motion:reduce){
+  .aud-tab.waiting .aud-dot{animation:none}
+}
 
 .aud-n{font-family:var(--mono);font-size:11px;font-weight:600;
   background:var(--bad);color:#fff;border-radius:999px;padding:1px 7px;
@@ -1142,4 +1172,38 @@
 @keyframes countPulse{0%,100%{opacity:1}50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){
   .tab-btn .count.hot{animation:none}
+}
+
+/* ============================================================
+   AS DUAS SECÇÕES DA LISTA
+
+   As minhas conversas em cima, o resto por baixo. Numa lista
+   única as minhas ficavam misturadas e ordenadas por urgência —
+   a que eu tenho de responder podia estar a meio.
+
+   As minhas exigem ação minha; as outras são contexto.
+   ============================================================ */
+.list-head{display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px 8px;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  position:sticky;top:0;z-index:2;background:var(--card);
+  border-bottom:1px solid var(--border)}
+.list-head + .chat-row{border-top:0}
+.list-head span{font-size:11px;letter-spacing:0;color:var(--muted);
+  background:var(--card-2);border-radius:999px;padding:1px 8px;min-width:20px;
+  text-align:center}
+
+/* As minhas levam a cor do estado ativo: são as que estão comigo. */
+.list-head.mine{color:#2563EB}
+.list-head.mine span{background:color-mix(in srgb,#2563EB 14%,transparent);
+  color:#2563EB}
+
+/* ---------- pesquisa nas conversas ---------- */
+.desk-search{display:flex;gap:9px;padding:12px 20px;background:var(--card);
+  border-bottom:1px solid var(--border);flex-wrap:wrap}
+.desk-search .search-input{flex:1;min-width:150px;height:38px}
+.desk-search .clear-btn{flex:0 0 auto}
+@media (max-width:700px){
+  .desk-search{padding:10px 12px}
+  .desk-search .search-input{min-width:0}
 }

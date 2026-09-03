@@ -541,27 +541,26 @@
       <div id="shiftNote" style="margin-top:12px;color:var(--muted);font-size:12.5px;line-height:1.6"></div>
     </div>
 
-    <div id="chatTab" class="panel">
-      <!-- Quem se está a atender. Três públicos com necessidades
-           diferentes: um cliente pergunta pela reserva, um motorista
-           pelo pagamento, uma agência pela comissão. Misturá-los na
-           mesma fila obriga o agente a mudar de cabeça a cada
-           conversa. -->
-      <div class="aud-tabs" id="audTabs">
-        <button class="aud-tab" data-aud="customers" type="button">
-          <span class="aud-dot"></span>Customers
-          <span class="aud-n hidden" id="audNCustomers">0</span>
-        </button>
-        <button class="aud-tab active" data-aud="drivers" type="button">
-          <span class="aud-dot"></span>Drivers
-          <span class="aud-n hidden" id="audNDrivers">0</span>
-        </button>
-        <button class="aud-tab" data-aud="agents" type="button">
-          <span class="aud-dot"></span>Travel agents
-          <span class="aud-n hidden" id="audNAgents">0</span>
-        </button>
-      </div>
+<!-- As abas de público vivem FORA dos painéis.
+     Estavam dentro do chatTab, e mudar para clientes escondia o
+     painel inteiro — levando as abas consigo. Ficava-se sem forma
+     de voltar. -->
+<div class="aud-tabs hidden" id="audTabs">
+  <button class="aud-tab" data-aud="customers" type="button">
+    <span class="aud-dot"></span>Customers
+    <span class="aud-n hidden" id="audNCustomers">0</span>
+  </button>
+  <button class="aud-tab active" data-aud="drivers" type="button">
+    <span class="aud-dot"></span>Drivers
+    <span class="aud-n hidden" id="audNDrivers">0</span>
+  </button>
+  <button class="aud-tab" data-aud="agents" type="button">
+    <span class="aud-dot"></span>Travel agents
+    <span class="aud-n hidden" id="audNAgents">0</span>
+  </button>
+</div>
 
+    <div id="chatTab" class="panel">
       <!-- A mesma pesquisa que o separador de clientes tem.
            Um agente que atenda os três públicos não devia ter de
            mudar de método conforme quem está do outro lado. -->

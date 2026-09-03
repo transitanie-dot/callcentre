@@ -1403,6 +1403,46 @@ function renderDesk() {
    * responder podia estar a meio. As minhas são as que exigem ação
    * minha; as outras são contexto.
    */
+  /**
+   * Na aba de escaladas, a lista é outra.
+   *
+   * Estas conversas não estão na fila normal — foram tiradas de lá
+   * de propósito, para nenhum agente as voltar a pegar.
+   */
+  if (audAtual === 'escalated') {
+    if (!escaladas.length) {
+      el('chatList').innerHTML = '<div class="no-results">' +
+        'Nothing escalated right now.<br><span style="color:var(--muted);' +
+        'font-size:13px">When an agent cannot resolve something, it lands here.' +
+        '</span></div>';
+      return;
+    }
+
+    el('chatList').innerHTML = '<div class="list-head mine">Escalated <span>' +
+      escaladas.length + '</span></div>' + escaladas.map(function (c) {
+        return '<button class="chat-row urgent" data-chat="' + escapeHtml(c.chat_id) +
+          '" type="button">' +
+          '<div class="row-top"><strong>' +
+          escapeHtml(c.trading_name || c.legal_name || 'Partner') +
+          '</strong><span class="when">' + (c.escalated_minutes || 0) + 'm</span></div>' +
+          // A nota vem no formato "Escalated by Rick: o que se passa".
+          // Separa-se aqui em vez de guardar o nome numa coluna
+          // própria — seria mais um sítio para manter sincronizado.
+          '<div class="snip">' + escapeHtml(semPrefixo(c.escalation_note)) + '</div>' +
+          '<div class="tags"><span class="tag bad">from ' +
+          escapeHtml(quemEscalou(c.escalation_note)) + '</span></div>' +
+          '</button>';
+      }).join('');
+
+    qsa('[data-chat]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        openDeskChat(b.getAttribute('data-chat'));
+      });
+    });
+
+    return;
+  }
+
   var visiveis = filtrarConversas(desk.chats);
 
   var minhas = visiveis.filter(function (c) {
@@ -1545,6 +1585,10 @@ async function openDeskChat(chatId) {
   // conversa: lado a lado num ecrã de 380px dá 190px para cada, e
   // nenhuma das duas funciona nesse espaço.
   document.body.classList.add('chat-open');
+
+  // O parceiro passa a ver que o que escreveu chegou. É daí que vêm
+  // as mensagens repetidas quando não há resposta imediata.
+  deskFetch('/api/admin/chat/read', { chat_id: chatId }).catch(function () {});
   // O histórico é do parceiro anterior; trocar de conversa fecha-o.
   el('histPanel').hidden = true;
   el('histRead').hidden = true;
@@ -2063,6 +2107,41 @@ function marcaDe(c) {
 // chat nenhum. As abas existem para quando tiverem, e as vazias
 // dizem-no em vez de fingirem uma fila.
 // ============================================================
+// ============================================================
+// A FILA DE ESCALADAS
+//
+// Só supervisores. Uma conversa escalada sai da fila normal —
+// deixá-la lá significa que um agente a pode pegar outra vez, e o
+// parceiro explica tudo pela terceira vez à mesma pessoa que já
+// não sabia responder.
+// ============================================================
+var escaladas = [];
+
+/** O nome de quem escalou, tirado da nota. */
+function quemEscalou(nota) {
+  var m = /^Escalated by ([^:]+):/.exec(String(nota || ''));
+  return m ? m[1].trim() : 'an agent';
+}
+
+/** A nota sem o prefixo do nome, que já aparece à parte. */
+function semPrefixo(nota) {
+  return String(nota || '').replace(/^Escalated by [^:]+:\s*/, '');
+}
+
+async function carregarEscaladas() {
+  if (!souSupervisor) return;
+
+  try {
+    var r = await deskFetch('/api/admin/escalations');
+    escaladas = r.chats || [];
+  } catch (e) {
+    escaladas = [];
+  }
+
+  pintarAudTabs();
+  if (audAtual === 'escalated') renderDesk();
+}
+
 var audAtual = (function () {
   try {
     var g = localStorage.getItem('airportlink-desk-aud');
@@ -2159,8 +2238,14 @@ function pintarAudTabs() {
   var estado = {
     drivers: { espera: esperam, curso: emCurso },
     customers: { espera: alerts.supportTab || 0, curso: 0 },
-    agents: { espera: 0, curso: 0 }
+    agents: { espera: 0, curso: 0 },
+    // Uma escalada à espera é o caso mais urgente que existe: já
+    // passou por um agente que não conseguiu resolver.
+    escalated: { espera: escaladas.length, curso: 0 }
   };
+
+  // A aba de escaladas só existe para supervisores.
+  el('audTabEsc').classList.toggle('hidden', !souSupervisor);
 
   qsa('[data-aud]').forEach(function (b) {
     var qual = b.getAttribute('data-aud');
@@ -2172,7 +2257,8 @@ function pintarAudTabs() {
   });
 
   var contadores = {
-    drivers: 'audNDrivers', customers: 'audNCustomers', agents: 'audNAgents'
+    drivers: 'audNDrivers', customers: 'audNCustomers',
+    agents: 'audNAgents', escalated: 'audNEsc'
   };
 
   Object.keys(contadores).forEach(function (qual) {
@@ -2201,6 +2287,12 @@ qsa('[data-aud]').forEach(function (b) {
     if (qual === 'customers') {
       switchTab('supportTab');
       pintarAudTabs();
+      return;
+    }
+
+    if (qual === 'escalated') {
+      switchTab('chatTab');
+      carregarEscaladas();
       return;
     }
 
@@ -2239,6 +2331,11 @@ async function carregarCargo() {
   }
 
   aplicarCargo();
+
+  // A fila de escaladas, se for supervisor. Um caso escalado à
+  // espera é o mais urgente que existe: já passou por alguém que
+  // não conseguiu resolver.
+  if (souSupervisor) carregarEscaladas();
 }
 
 /** Esconde o que este cargo não pode ver. */
@@ -2724,8 +2821,11 @@ var STATES = [
   { key: 'admin', label: 'Admin', color: '#64748B', takes: false,
     note: 'Administrative work. No new chats.' },
   { key: 'break', label: 'Break', color: '#D97706', takes: false,
-    note: 'On a break. The chats you already have still work, and you still ' +
+    note: 'Short break. The chats you already have still work, and you still ' +
       'count as being on shift.' },
+  { key: 'lunch', label: 'Lunch', color: '#CA8A04', takes: false,
+    note: 'Longer break. Counts separately from short breaks, which is what ' +
+      'makes the day report useful for planning shifts.' },
   { key: 'offline', label: 'Offline', color: '#DC2626', takes: false,
     // Sem nota: o estado diz-se sozinho. Mas há uma regra que
     // convém saber antes de tentar.

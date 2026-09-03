@@ -1381,7 +1381,25 @@ function renderDesk() {
     return;
   }
 
-  el('chatList').innerHTML = desk.chats.map(function (c) {
+  /**
+   * Duas secções: as minhas em cima, o resto por baixo.
+   *
+   * Numa lista única, as minhas conversas ficavam misturadas entre
+   * as dos outros e ordenadas por urgência — e a que eu tenho de
+   * responder podia estar a meio. As minhas são as que exigem ação
+   * minha; as outras são contexto.
+   */
+  var visiveis = filtrarConversas(desk.chats);
+
+  var minhas = visiveis.filter(function (c) {
+    return c.assigned_to === adminId();
+  });
+
+  var outras = visiveis.filter(function (c) {
+    return c.assigned_to !== adminId();
+  });
+
+  var cartao = function (c) {
     var isMine = c.assigned_to === (adminId());
     var taken = c.assigned_to && !isMine;
 
@@ -1411,7 +1429,38 @@ function renderDesk() {
       '<div class="snip">' + escapeHtml(c.last_message_text || 'No messages yet') + '</div>' +
       (tags.length ? '<div class="tags">' + tags.join('') + '</div>' : '') +
       '</button>';
-  }).join('');
+  };
+
+  var html = '';
+
+  if (minhas.length) {
+    html += '<div class="list-head mine">Mine <span>' + minhas.length + '</span></div>' +
+      minhas.map(cartao).join('');
+  }
+
+  if (outras.length) {
+    html += '<div class="list-head">All conversations <span>' + outras.length +
+      '</span></div>' + outras.map(cartao).join('');
+  }
+
+  // Com filtro ativo, uma lista vazia tem de dizer porquê. Sem
+  // isto parecia que não havia conversas nenhumas.
+  if (!html) {
+    html = '<div class="no-results">Nothing matches that filter.' +
+      '<br><button class="clear-btn" id="deskNoneClear" type="button" ' +
+      'style="margin-top:12px">Clear the filter</button></div>';
+  }
+
+  el('chatList').innerHTML = html;
+
+  var limpar = document.getElementById('deskNoneClear');
+  if (limpar) {
+    limpar.addEventListener('click', function () {
+      el('deskSearch').value = '';
+      el('deskSearchState').value = '';
+      renderDesk();
+    });
+  }
 
   qsa('[data-chat]').forEach(function (b) {
     b.addEventListener('click', function () { openDeskChat(b.getAttribute('data-chat')); });
@@ -1950,22 +1999,96 @@ var audAtual = (function () {
   return 'drivers';
 })();
 
-function pintarAudTabs() {
-  qsa('[data-aud]').forEach(function (b) {
-    b.classList.toggle('active', b.getAttribute('data-aud') === audAtual);
-  });
+/**
+ * As abas de público, com o estado de cada fila.
+ *
+ *   verde   nada à espera
+ *   azul    conversas em curso
+ *   laranja alguém à espera de resposta
+ *
+ * O laranja ganha sempre: uma fila com gente à espera e conversas
+ * em curso ao mesmo tempo é uma fila com gente à espera.
+ */
+/**
+ * A pesquisa nas conversas.
+ *
+ * O separador de clientes já tinha pesquisa; o de parceiros não. Um
+ * agente que atenda os três públicos não devia ter de mudar de
+ * método conforme quem está do outro lado.
+ */
+function filtrarConversas(lista) {
+  var q = (el('deskSearch').value || '').trim().toLowerCase();
+  var estado = el('deskSearchState').value || '';
 
-  // Os motoristas contam da fila que já existe. Os outros ficam a
-  // zero até terem fila própria.
-  var esperam = (desk.todas || desk.chats || []).filter(function (c) {
+  return (lista || []).filter(function (c) {
+    if (q) {
+      var campos = [c.trading_name, c.legal_name, c.email, c.ticket_number,
+                    c.subject, c.last_message_text, c.contact_phone, c.country];
+      var achou = campos.some(function (x) {
+        return String(x || '').toLowerCase().indexOf(q) !== -1;
+      });
+      if (!achou) return false;
+    }
+
+    if (estado === 'waiting') return !c.assigned_to;
+    if (estado === 'mine') return c.assigned_to === adminId();
+    if (estado === 'taken') return c.assigned_to && c.assigned_to !== adminId();
+    if (estado === 'late') return (c.awaiting_reply_minutes || 0) >= 3;
+
+    return true;
+  });
+}
+
+el('deskSearch').addEventListener('input', renderDesk);
+el('deskSearchState').addEventListener('change', renderDesk);
+
+el('deskSearchClear').addEventListener('click', function () {
+  el('deskSearch').value = '';
+  el('deskSearchState').value = '';
+  renderDesk();
+});
+
+function pintarAudTabs() {
+  var todas = desk.todas || desk.chats || [];
+
+  var esperam = todas.filter(function (c) {
     return !c.assigned_to && c.unread_for_admin > 0;
   }).length;
 
-  var n = el('audNDrivers');
-  if (n && !n.__missing) {
-    n.textContent = esperam;
-    n.classList.toggle('hidden', !esperam);
-  }
+  var emCurso = todas.filter(function (c) {
+    return c.assigned_to && c.status === 'open';
+  }).length;
+
+  // Hoje só os motoristas têm fila própria. Os clientes vivem noutro
+  // separador e as agências ainda não têm chat — daí os contadores
+  // deles ficarem a zero.
+  var estado = {
+    drivers: { espera: esperam, curso: emCurso },
+    customers: { espera: alerts.supportTab || 0, curso: 0 },
+    agents: { espera: 0, curso: 0 }
+  };
+
+  qsa('[data-aud]').forEach(function (b) {
+    var qual = b.getAttribute('data-aud');
+    var e = estado[qual] || { espera: 0, curso: 0 };
+
+    b.classList.toggle('active', qual === audAtual);
+    b.classList.toggle('waiting', e.espera > 0);
+    b.classList.toggle('busy', e.espera === 0 && e.curso > 0);
+  });
+
+  var contadores = {
+    drivers: 'audNDrivers', customers: 'audNCustomers', agents: 'audNAgents'
+  };
+
+  Object.keys(contadores).forEach(function (qual) {
+    var n = el(contadores[qual]);
+    if (!n || n.__missing) return;
+
+    var e = estado[qual] || { espera: 0 };
+    n.textContent = e.espera;
+    n.classList.toggle('hidden', !e.espera);
+  });
 }
 
 qsa('[data-aud]').forEach(function (b) {
@@ -2329,7 +2452,10 @@ var STATES = [
   { key: 'live', label: 'Live', color: '#16A34A', takes: true,
     note: 'Ready for chats. New ones can be assigned to you.' },
   { key: 'active', label: 'Active', color: '#2563EB', takes: true, auto: true,
-    note: 'You have chats open. This changes on its own as you take and close them.' },
+    note: 'You have chats open. This changes on its own as you take and close them.',
+    // Quantos chats abertos, no rótulo. Um agente que veja 2/3 sabe
+    // que ainda pode receber um; a 3/3 sabe porque parou de tocar.
+    contagem: true },
   { key: 'escalating', label: 'Escalating', color: '#C2410C', takes: false,
     note: 'Working something out with a supervisor. No new chats reach you, ' +
       'and the ones you have stay with you.' },
@@ -2343,7 +2469,7 @@ var STATES = [
     note: 'On a break. The chats you already have still work, and you still ' +
       'count as being on shift.' },
   { key: 'offline', label: 'Offline', color: '#DC2626', takes: false,
-    note: 'Off duty. You will not be given new chats.' }
+    note: '' }
 ];
 
 // ============================================================
@@ -2418,9 +2544,18 @@ function pintarDuty() {
     ? duracao(Math.round((Date.now() - estadoDesde) / 1000))
     : null;
 
+  var rotulo = info.label;
+
+  if (info.contagem) {
+    var meus = (desk.chats || []).filter(function (c) {
+      return c.assigned_to === adminId() && c.status === 'open';
+    }).length;
+    rotulo += ' ' + meus + '/3';
+  }
+
   el('dutyLabel').textContent = desk.state === 'unknown'
     ? 'Checking'
-    : info.label + (nele ? ' · ' + nele : '');
+    : rotulo + (nele ? ' · ' + nele : '');
 
   btn.style.setProperty('--duty-color', info.color);
   btn.classList.toggle('taking', Boolean(info.takes));
@@ -2438,11 +2573,20 @@ function pintarDuty() {
     // O active aparece mas não se clica: entra e sai sozinho.
     var tempo = tempoDoDia[st.key];
 
+    var nome = st.label;
+
+    if (st.contagem) {
+      var abertos = (desk.chats || []).filter(function (c) {
+        return c.assigned_to === adminId() && c.status === 'open';
+      }).length;
+      nome += ' ' + abertos + '/3';
+    }
+
     return '<button class="duty-opt' + (st.key === desk.state ? ' on' : '') +
       (st.auto ? ' auto' : '') + '" data-duty-opt="' + st.key + '" type="button"' +
       (st.auto ? ' disabled' : '') + '>' +
       '<span class="dot" style="background:' + st.color + '"></span>' +
-      escapeHtml(st.label) +
+      escapeHtml(nome) +
       (tempo ? '<small>' + duracao(tempo) + '</small>' : '') +
       '</button>' +
       (st.key === 'admin' ? '<div class="duty-sep"></div>' : '');

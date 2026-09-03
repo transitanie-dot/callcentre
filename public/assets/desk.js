@@ -174,8 +174,22 @@ async function enterAdmin(session) {
   el('bootView').classList.add('hidden');
   el('adminApp').classList.remove('hidden');
   el('adminWhoami').textContent = session.user.email;
-  await init();
+
+  /**
+   * O painel aparece já; os dados chegam a seguir.
+   *
+   * O await aqui segurava o ecrã até TODAS as chamadas terminarem.
+   * Cada uma custa cerca de dois segundos, e o agente ficava a olhar
+   * para nada durante esse tempo.
+   *
+   * As secções sabem mostrar "Loading..." sozinhas — é para isso que
+   * lá está.
+   */
   reportHeight();
+
+  init().catch(function (e) {
+    console.error('init:', e);
+  });
 }
 
 el('gateBtn').addEventListener('click', async function () {
@@ -2049,6 +2063,18 @@ el('deskSearchClear').addEventListener('click', function () {
 });
 
 function pintarAudTabs() {
+  /**
+   * As abas só existem onde fazem sentido.
+   *
+   * Vivem fora dos painéis para não desaparecerem ao mudar de
+   * público — mas isso significa que apareceriam também nas
+   * reservas e nas finanças, onde não querem dizer nada.
+   */
+  var emChat = activeTab === 'chatTab' || activeTab === 'supportTab';
+  el('audTabs').classList.toggle('hidden', !emChat);
+
+  if (!emChat) return;
+
   var todas = desk.todas || desk.chats || [];
 
   var esperam = todas.filter(function (c) {
@@ -2106,6 +2132,7 @@ qsa('[data-aud]').forEach(function (b) {
     // fingir que a aba faz alguma coisa.
     if (qual === 'customers') {
       switchTab('supportTab');
+      pintarAudTabs();
       return;
     }
 
@@ -2119,6 +2146,7 @@ qsa('[data-aud]').forEach(function (b) {
       return;
     }
 
+    switchTab('chatTab');
     loadDesk();
   });
 });
@@ -2181,10 +2209,37 @@ async function iniciarApoio() {
   });
 
   aplicarNome(meu);
-  await aplicarEstado(meu);
 
-  await atalhos;
-  await cargo;
+  /**
+   * A barra aparece com o que já sabemos, sem esperar por mais nada.
+   *
+   * O aplicarEstado chamava o setDeskState, que faz OUTRA ida ao
+   * servidor para gravar a presença. A barra ficava escondida esses
+   * dois segundos — a somar aos dois do /api/admin/team.
+   *
+   * Aqui pinta-se primeiro com a resposta que já chegou, e a
+   * gravação vai a caminho sem ninguém à espera dela.
+   */
+  if (meu && meu.state && meu.state !== 'offline') {
+    var desde = meu.state_since ? Date.parse(meu.state_since) : null;
+
+    desk.state = meu.state;
+    if (desde && !isNaN(desde)) estadoDesde = desde;
+
+    document.body.setAttribute('data-duty', meu.state);
+    el('dutyNote').textContent = STATE_NOTES[meu.state] || '';
+    pintarDuty();
+    pintarDia();
+  } else {
+    desk.state = 'offline';
+    document.body.setAttribute('data-duty', 'offline');
+    pintarDuty();
+  }
+
+  // A gravação e o resto correm sem bloquear o desenho.
+  aplicarEstado(meu).catch(function () {});
+  atalhos.catch(function () {});
+  cargo.catch(function () {});
 }
 
 /** O nome do servidor, se lá houver algum. */
@@ -5737,6 +5792,15 @@ function switchTab(name) {
     document.title = 'Airportlink operations';
     loadDesk();
   }
+
+  // As abas de público aparecem e desaparecem com o separador, e a
+  // que fica ativa acompanha: entrar no separador de clientes marca
+  // a aba de clientes, e vice-versa.
+  if (name === 'supportTab') audAtual = 'customers';
+  else if (name === 'chatTab' && audAtual === 'customers') audAtual = 'drivers';
+
+  pintarAudTabs();
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
   reportHeight();
 }
@@ -5854,29 +5918,43 @@ el('convClearSearchBtn').addEventListener('click', function () {
 });
 
 async function init() {
-  await loadBookings(bookingFilters);
-  await loadContacts();
-  await loadConversations();
-  await loadAgents();
-  await loadPartners();
-  await loadCharges();
-  await loadFinance();
   /**
-   * Tudo o que fala com o serviço de drivers, ao mesmo tempo.
+   * A barra de estado primeiro, e sozinha.
    *
-   * Cada chamada custa cerca de dois segundos de latência no plano
-   * gratuito do Render. Em fila somavam-se; em paralelo pagam-se
-   * uma vez só, porque partem juntas.
+   * Estava no fim de sete chamadas em fila — reservas, contactos,
+   * conversas, agências, parceiros, cobranças e finanças. Só depois
+   * de todas é que o agente via se estava ao serviço.
+   *
+   * É a informação mais urgente do painel e era a última a chegar.
+   * Agora parte primeiro e o resto vai atrás, sem ninguém à espera.
    */
   pintarMarcas();
 
-  await Promise.all([
+  var apoio = Promise.all([
     iniciarApoio(),
     loadDesk(),
     carregarDia()
-  ]);
+  ]).then(function () {
+    arrancarDia();
+  });
 
-  arrancarDia();
+  /**
+   * O resto em paralelo, não em fila.
+   *
+   * Sete chamadas seguidas somavam sete latências. Em paralelo
+   * paga-se uma vez, porque partem juntas — e nenhuma delas depende
+   * do resultado da anterior.
+   */
+  await Promise.all([
+    apoio,
+    loadBookings(bookingFilters).catch(function (e) { console.error('bookings:', e); }),
+    loadContacts().catch(function (e) { console.error('contacts:', e); }),
+    loadConversations().catch(function (e) { console.error('conversations:', e); }),
+    loadAgents().catch(function (e) { console.error('agents:', e); }),
+    loadPartners().catch(function (e) { console.error('partners:', e); }),
+    loadCharges().catch(function (e) { console.error('charges:', e); }),
+    loadFinance().catch(function (e) { console.error('finance:', e); })
+  ]);
 
   subscribeToAllConversations();
   watchLive();

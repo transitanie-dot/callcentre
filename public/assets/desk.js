@@ -23,14 +23,15 @@ var CFG = window.__DESK_CONFIG || {};
  */
 var BRANDS = CFG.brands || [{ key: 'airportlink', label: 'Airportlink', color: '#0F766E' }];
 
-/** A marca que o agente está a ver agora. */
-var brandAtual = (function () {
-  try {
-    var g = localStorage.getItem('airportlink-desk-brand');
-    if (g && BRANDS.some(function (b) { return b.key === g; })) return g;
-  } catch (e) {}
-  return BRANDS[0].key;
-})();
+/**
+ * A marca que o agente está a ver agora.
+ *
+ * Começa na primeira e é substituída pelo que o servidor disser.
+ * Lia do localStorage, e com vários agentes isso quebra: dois no
+ * mesmo computador partilhavam a escolha, e o mesmo agente em dois
+ * sítios via coisas diferentes.
+ */
+var brandAtual = BRANDS[0].key;
 
 var SUPABASE_URL = CFG.supabaseUrl || 'https://ujpagsccfiledbtfeyuq.supabase.co';
 var SUPABASE_ANON_KEY = CFG.supabaseAnonKey || 'sb_publishable_1Oc8DziBDPMs0MAxhrGGxw_qhTPIYOZ';
@@ -700,9 +701,7 @@ var desk = {
  * não mostrar nada, porque parece uma resposta e não é.
  */
 (function pintarDeImediato() {
-  try {
-    deskDisplayName = localStorage.getItem('airportlink-agent-name') || null;
-  } catch (e) {}
+  // O nome vem do servidor. O painel arranca sem ele.
 
   /**
    * Com defer, o DOMContentLoaded já disparou.
@@ -963,15 +962,6 @@ async function lerConversa(chatId) {
 // suas, a voz da empresa desfaz-se em cinco vozes.
 // ============================================================
 var snips = { todos: [], vistos: [], escolhido: 0 };
-
-async function carregarSnips() {
-  try {
-    var res = await deskFetch('/api/admin/snippets');
-    snips.todos = res.snippets || [];
-  } catch (e) {
-    snips.todos = [];
-  }
-}
 
 function fecharSnips() {
   el('snipBox').hidden = true;
@@ -1761,7 +1751,7 @@ async function pegarConversa(chatId) {
    */
   if (desk.state === 'offline' || desk.state === 'unknown') {
     desk.state = 'active';
-    estadoDesde = Date.now();
+    marcarEstadoDesde(0);
     document.body.setAttribute('data-duty', 'active');
     pintarDuty();
   }
@@ -1813,7 +1803,7 @@ function ajustarActive() {
 
   // Só o ecrã. A gravação já aconteceu no servidor.
   desk.state = devia;
-  estadoDesde = Date.now();
+  marcarEstadoDesde(0);
   document.body.setAttribute('data-duty', devia);
   el('dutyNote').textContent = STATE_NOTES[devia] || '';
   pintarDuty();
@@ -2251,7 +2241,7 @@ async function trocarMarca(chave) {
   if (chave === brandAtual) return;
 
   brandAtual = chave;
-  try { localStorage.setItem('airportlink-desk-brand', chave); } catch (e) {}
+  gravarPref({ brand: chave });
 
   // A conversa aberta é da marca anterior: fecha-se antes de trocar,
   // senão ficava no ecrã sem pertencer à fila que se está a ver.
@@ -2324,13 +2314,13 @@ async function carregarEscaladas() {
   if (audAtual === 'escalated') renderDesk();
 }
 
-var audAtual = (function () {
-  try {
-    var g = localStorage.getItem('airportlink-desk-aud');
-    if (g) return g;
-  } catch (e) {}
-  return 'drivers';
-})();
+/**
+ * A aba de público. Vem do servidor, como tudo o resto.
+ *
+ * Se dois agentes abrirem o painel, veem o mesmo — porque tudo
+ * vem do mesmo sítio.
+ */
+var audAtual = 'drivers';
 
 /**
  * As abas de público, com o estado de cada fila.
@@ -2390,6 +2380,19 @@ el('deskSearchClear').addEventListener('click', function () {
   el('deskSearchState').value = '';
   renderDesk();
 });
+
+/**
+ * Grava uma preferência no servidor.
+ *
+ * Sem esperar pela resposta: mudar de aba tem de ser imediato no
+ * ecrã, e se a gravação falhar o pior que acontece é a próxima
+ * sessão abrir na aba anterior.
+ */
+function gravarPref(o) {
+  deskFetch('/api/admin/prefs', o).catch(function (e) {
+    console.log('[desk] pref not saved:', e.message);
+  });
+}
 
 function pintarAudTabs() {
   /**
@@ -2459,7 +2462,7 @@ qsa('[data-aud]').forEach(function (b) {
     if (qual === audAtual) return;
 
     audAtual = qual;
-    try { localStorage.setItem('airportlink-desk-aud', qual); } catch (e) {}
+    gravarPref({ audience: qual });
 
     pintarAudTabs();
 
@@ -2477,33 +2480,6 @@ qsa('[data-aud]').forEach(function (b) {
   });
 });
 
-/**
- * Quem sou eu.
- *
- * O painel precisa do cargo antes de desenhar o menu: as finanças
- * só aparecem a supervisores. A garantia real está nas rotas do
- * servidor — isto é só para não mostrar portas fechadas.
- */
-async function carregarCargo() {
-  try {
-    var eu = await deskFetch('/api/admin/me');
-    meuCargo = eu.role || 'agent';
-    souSupervisor = Boolean(eu.is_supervisor);
-  } catch (e) {
-    // Sem resposta assume-se agente: é o menos permissivo, e a
-    // rota recusaria na mesma se alguém tentasse.
-    meuCargo = 'agent';
-    souSupervisor = false;
-  }
-
-  aplicarCargo();
-
-  // A fila de escaladas, se for supervisor. Um caso escalado à
-  // espera é o mais urgente que existe: já passou por alguém que
-  // não conseguiu resolver.
-  if (souSupervisor) carregarEscaladas();
-}
-
 /** Esconde o que este cargo não pode ver. */
 function aplicarCargo() {
   qsa('[data-tab]').forEach(function (b) {
@@ -2519,62 +2495,93 @@ function aplicarCargo() {
   document.body.setAttribute('data-role', meuCargo);
 }
 
+/**
+ * Uma chamada, e o painel sabe tudo.
+ *
+ * Antes eram três: a equipa, os atalhos e o cargo. Cada uma custa
+ * cerca de dois segundos no plano gratuito do Render, e o painel
+ * não podia desenhar nada antes de saber quem estava a olhar.
+ *
+ * O agent_session devolve nome, cargo, avatar, estado, segundos no
+ * estado, preferências e atalhos — do servidor, que é a única
+ * fonte. O browser não guarda nada disto entre sessões.
+ */
 async function iniciarApoio() {
-  /**
-   * Um só pedido ao /api/admin/team.
-   *
-   * O nome e o estado vêm da mesma linha da support_presence, e o
-   * painel pedia-a duas vezes — uma para cada. Com dois segundos
-   * de latência por chamada, isso são dois segundos deitados fora
-   * em cada carregamento.
-   *
-   * As respostas rápidas vão em paralelo: não dependem disto.
-   */
-  var equipa = deskFetch('/api/admin/team').catch(function () { return null; });
-  var atalhos = carregarSnips();
-  var cargo = carregarCargo();
+  var ses;
 
-  var team = await equipa;
-  var meu = team && (team.team || []).find(function (t) {
-    return t.user_id === adminId();
+  try {
+    ses = await deskFetch('/api/admin/session');
+  } catch (e) {
+    console.error('[desk] session:', e.message);
+
+    // Sem sessão não se inventa nada. Offline é o estado seguro:
+    // melhor não receber conversas do que julgar que se está a
+    // receber e não estar.
+    desk.state = 'offline';
+    document.body.setAttribute('data-duty', 'offline');
+    pintarDuty();
+    return;
+  }
+
+  // ---------- quem sou ----------
+  deskDisplayName = ses.display_name || null;
+  meuAvatar = ses.avatar_path || null;
+  souSupervisor = Boolean(ses.is_supervisor);
+
+  paintDisplayName();
+  aplicarCargo();
+
+  // ---------- o que prefiro ----------
+  var prefs = ses.prefs || {};
+
+  if (prefs.audience) audAtual = prefs.audience;
+
+  if (prefs.brand && BRANDS.some(function (b) { return b.key === prefs.brand; })) {
+    brandAtual = prefs.brand;
+  }
+
+  /**
+   * O som não tem interruptor: segue o estado.
+   *
+   * Um agente em Live ouve; em break ou offline não. A preferência
+   * existe na base para quando houver botão, mas nada a lê hoje —
+   * e ler uma coisa que ninguém escreve seria pior do que não a
+   * ler de todo.
+   */
+
+  // ---------- em que estado estou ----------
+  desk.state = ses.state || 'offline';
+
+  /**
+   * Os segundos vêm do relógio do Postgres.
+   *
+   * É o único número que não depende da hora do computador de quem
+   * está a olhar — e é por isso que um refresh deixa de reiniciar
+   * a contagem.
+   */
+  marcarEstadoDesde(ses.state_seconds || 0);
+
+  document.body.setAttribute('data-duty', desk.state);
+  el('dutyNote').textContent = STATE_NOTES[desk.state] || '';
+
+  pintarDuty();
+  pintarMarcas();
+  pintarAudTabs();
+
+  // O som fica pronto se o estado recebe conversas. Sem gesto do
+  // utilizador o browser recusa, mas o desbloqueio fica agendado
+  // para o primeiro clique.
+  if (desk.state === 'live' || desk.state === 'active') unlockAudio();
+
+  // ---------- os atalhos ----------
+  snips.todos = (ses.snippets || []).map(function (x) {
+    return { id: x.id, shortcut: x.shortcut, title: x.title, body: x.body, mine: x.mine };
   });
 
-  aplicarNome(meu);
-
-  /**
-   * A barra aparece com o que já sabemos, sem esperar por mais nada.
-   *
-   * O aplicarEstado chamava o setDeskState, que faz OUTRA ida ao
-   * servidor para gravar a presença. A barra ficava escondida esses
-   * dois segundos — a somar aos dois do /api/admin/team.
-   *
-   * Aqui pinta-se primeiro com a resposta que já chegou, e a
-   * gravação vai a caminho sem ninguém à espera dela.
-   */
-  /**
-   * O estado, retomado sem o gravar.
-   *
-   * Havia aqui duas coisas a fazer o mesmo: este bloco pintava, e o
-   * aplicarEstado gravava por baixo. A gravação abria um período
-   * novo no servidor, e o tempo voltava a zero a cada refresh.
-   *
-   * Retomar não é mudar. Agora só se pinta.
-   */
-  aplicarEstado(meu);
-
-  atalhos.catch(function () {});
-  cargo.catch(function () {});
-}
-
-/** O nome do servidor, se lá houver algum. */
-function aplicarNome(meu) {
-  if (meu) meuAvatar = meu.avatar_path || null;
-
-  if (meu && meu.display_name) {
-    deskDisplayName = meu.display_name;
-    try { localStorage.setItem(NAME_KEY, meu.display_name); } catch (e) {}
-  }
-  paintDisplayName();
+  // A fila de escaladas, se for supervisor. Um caso escalado à
+  // espera é o mais urgente que existe: já passou por alguém que
+  // não conseguiu resolver.
+  if (souSupervisor) carregarEscaladas();
 }
 
 /**
@@ -2618,50 +2625,18 @@ setTimeout(function () {
   pintarDuty();
 }, 8000);
 
-/**
- * Retomar o estado depois de um refresh.
- *
- * NÃO chama o setDeskState. Isso mandava uma mudança ao servidor, e
- * o set_agent_state fechava o período em curso e abria um novo — o
- * tempo voltava a zero a cada atualização da página.
- *
- * Retomar não é mudar. O estado já é esse; só o ecrã é que não
- * sabia.
- */
-function aplicarEstado(meu) {
-  if (!meu || !meu.state) {
-    desk.state = 'offline';
-    estadoDesde = Date.now();
-    document.body.setAttribute('data-duty', 'offline');
-    pintarDuty();
-    return;
-  }
-
-  desk.state = meu.state;
-
-  // O período começou quando o servidor diz que começou.
-  var desde = meu.state_since ? Date.parse(meu.state_since) : null;
-  estadoDesde = (desde && !isNaN(desde)) ? desde : Date.now();
-
-  document.body.setAttribute('data-duty', meu.state);
-  el('dutyNote').textContent = STATE_NOTES[meu.state] || '';
-
-  pintarDuty();
-  pintarDia();
-
-  // O som fica pronto se o estado recebe conversas. Sem gesto do
-  // utilizador o browser recusa, mas o desbloqueio fica agendado
-  // para o primeiro clique.
-  if (meu.state === 'live' || meu.state === 'active') unlockAudio();
-}
-
 async function loadDisplayName() {
-  // Primeiro o que sabemos: o campo aparece preenchido de imediato
-  // em vez de piscar "Set your name" enquanto a rede responde.
-  try {
-    deskDisplayName = localStorage.getItem(NAME_KEY) || null;
-  } catch (e) {}
-
+  /**
+   * O nome vem do servidor, e só de lá.
+   *
+   * Havia aqui uma leitura do localStorage para o campo aparecer
+   * preenchido de imediato. Parecia inofensivo e não era: dois
+   * agentes no mesmo computador partilham o localStorage, e o
+   * segundo a entrar via o nome do primeiro no seu próprio painel.
+   *
+   * Agora fica vazio até o servidor responder. Meio segundo de
+   * espera vale mais do que um nome errado.
+   */
   paintDisplayName();
 
   // O pedido ao servidor é feito pelo iniciarApoio, que aproveita
@@ -2689,9 +2664,9 @@ el('deskName').addEventListener('click', async function () {
   }
 
   try {
-    await deskFetch('/api/admin/display-name', { display_name: name });
+    await deskFetch('/api/admin/name', { name: name });
     deskDisplayName = name;
-    try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
+    
     paintDisplayName();
     pintarDuty();
   } catch (e) {
@@ -3075,7 +3050,7 @@ function pintarDuty() {
    * um clique ou desviar o olhar para o outro lado do ecrã.
    */
   var nele = desk.state && desk.state !== 'unknown' && desk.state !== 'offline'
-    ? duracao(Math.round((Date.now() - estadoDesde) / 1000))
+    ? duracao(segundosNoEstado())
     : null;
 
   var rotulo = info.label;
@@ -3136,7 +3111,7 @@ function pintarDuty() {
      * direita, que é onde faz sentido.
      */
     var agora = st.key === desk.state
-      ? duracao(Math.round((Date.now() - estadoDesde) / 1000))
+      ? duracao(segundosNoEstado())
       : null;
 
     return '<button class="duty-opt' + (st.key === desk.state ? ' on' : '') +
@@ -3273,7 +3248,45 @@ document.addEventListener('click', function (e) {
 var tempoDoDia = {};
 var metricasDoDia = {};
 var diaTimer = null;
-var estadoDesde = Date.now();
+
+/**
+ * O tempo no estado atual vem do SERVIDOR.
+ *
+ * Havia aqui um estadoDesde = Date.now(), e meia dúzia de sítios a
+ * reescrevê-lo. Um refresh punha-o a agora, e a contagem
+ * recomeçava — o que se via, e o que estava mal.
+ *
+ * Mais grave do que o incómodo: o relógio do browser não é de
+ * confiança. Um agente com a hora do computador errada por dez
+ * minutos via números errados, e ninguém perceberia porquê.
+ *
+ * Agora guarda-se o que o servidor disse e quando o dissemos. O
+ * browser só conta o tempo DESDE a resposta, que é o único
+ * intervalo em que o relógio local é fiável.
+ */
+var estadoRef = { segundos: 0, medidoEm: Date.now() };
+
+/** Há quantos segundos estou neste estado, segundo o servidor. */
+function segundosNoEstado() {
+  if (desk.state === 'unknown' || desk.state === 'offline') return 0;
+
+  var desde = Math.round((Date.now() - estadoRef.medidoEm) / 1000);
+
+  return Math.max(0, estadoRef.segundos + desde);
+}
+
+/**
+ * O servidor deu um número novo.
+ *
+ * Chamado sempre que uma resposta traz state_seconds. A partir daí
+ * a contagem parte desse valor, e não do que o browser calculou.
+ */
+function marcarEstadoDesde(segundos) {
+  estadoRef = {
+    segundos: Number(segundos) || 0,
+    medidoEm: Date.now()
+  };
+}
 
 /** Quem sou eu, e com que cargo. */
 var meuCargo = 'agent';
@@ -3306,6 +3319,42 @@ function hojeLocal() {
     String(d.getDate()).padStart(2, '0');
 }
 
+/**
+ * Pergunta ao servidor há quanto tempo estou neste estado.
+ *
+ * Corre com a batida do ponto. Sem isto, o browser contaria
+ * sozinho durante horas — e um computador que adormece perde a
+ * conta sem dar por isso.
+ */
+async function sincronizarEstado() {
+  try {
+    var r = await deskFetch('/api/admin/team');
+
+    var meu = (r.team || []).find(function (t) {
+      return t.user_id === adminId();
+    });
+
+    if (!meu) return;
+
+    // O estado pode ter mudado do lado do servidor — uma escalada,
+    // um chat que fechou. O ecrã acompanha.
+    if (meu.state && meu.state !== desk.state) {
+      desk.state = meu.state;
+      document.body.setAttribute('data-duty', meu.state);
+      el('dutyNote').textContent = STATE_NOTES[meu.state] || '';
+    }
+
+    marcarEstadoDesde(meu.state_seconds || 0);
+
+    pintarDuty();
+    pintarDia();
+  } catch (e) {
+    // Uma falha aqui não é grave: o browser continua a contar a
+    // partir do último número bom.
+    console.log('[desk] state sync skipped:', e.message);
+  }
+}
+
 async function carregarDia() {
   try {
     // O offset em minutos face a UTC. O getTimezoneOffset devolve
@@ -3329,13 +3378,24 @@ function pintarDia() {
   var caixa = el('dayBar');
   if (!caixa || caixa.__missing) return;
 
-  // O estado atual conta desde que começou, somado ao que já lá
-  // estava. Sem isto ficava parado até ao próximo carregamento.
+  /**
+   * O estado atual conta desde a última resposta do servidor.
+   *
+   * O agent_day_states JÁ inclui o período a decorrer — soma o
+   * tempo até now() para o período sem ended_at. Somar o
+   * segundosNoEstado() por cima contava-o duas vezes, e a barra
+   * mostrava o dobro do tempo no estado atual.
+   *
+   * O que se soma aqui é só o que passou DESDE essa resposta, para
+   * o número não ficar parado entre atualizações.
+   */
   var vivo = Object.assign({}, tempoDoDia);
 
   if (desk.state && desk.state !== 'unknown' && desk.state !== 'offline') {
-    vivo[desk.state] = (vivo[desk.state] || 0) +
-      Math.round((Date.now() - estadoDesde) / 1000);
+    var desdeAResposta = Math.max(0,
+      Math.round((Date.now() - estadoRef.medidoEm) / 1000));
+
+    vivo[desk.state] = (vivo[desk.state] || 0) + desdeAResposta;
   }
 
   var m = metricasDoDia || {};
@@ -3515,13 +3575,13 @@ async function setDeskState(state, aRetomar, desdeQuando) {
   if (previous !== state) {
     if (previous && previous !== 'unknown' && previous !== 'offline') {
       tempoDoDia[previous] = (tempoDoDia[previous] || 0) +
-        Math.round((Date.now() - estadoDesde) / 1000);
+        segundosNoEstado();
     }
 
     // A retomar depois de um refresh, o período começou quando o
     // servidor diz que começou — não agora. Sem isto a contagem
     // recomeçava do zero a cada atualização da página.
-    estadoDesde = desdeQuando || Date.now();
+    marcarEstadoDesde(desdeQuando != null ? desdeQuando : 0);
   }
 
   pintarDuty();
@@ -3567,10 +3627,18 @@ async function setDeskState(state, aRetomar, desdeQuando) {
         display_name: deskDisplayName || adminName()
       }).catch(function () {});
 
-      // A conta do dia não pode ficar só na memória do browser: um
-      // separador aberto desde manhã acumularia erro. De dois em
-      // dois minutos vai buscar os números reais.
+      /**
+       * De dois em dois minutos, os números reais.
+       *
+       * A conta do dia não pode viver só na memória do browser: um
+       * separador aberto desde manhã acumula erro, e um portátil que
+       * adormeceu acumula muito mais.
+       *
+       * Isto traz também os segundos no estado atual, o que corrige
+       * qualquer desvio que o relógio local tenha criado.
+       */
       carregarDia();
+      sincronizarEstado();
     }, 120000);
   }
 
@@ -3868,7 +3936,7 @@ async function passRing(declined) {
     // de receber chamadas.
     if (r && r.went_offline) {
       desk.state = 'offline';
-      estadoDesde = Date.now();
+      marcarEstadoDesde(0);
       pintarDuty();
       pintarDia();
       el('dutyNote').textContent = STATE_NOTES.offline;
@@ -3927,54 +3995,202 @@ el('wentOffline').addEventListener('click', function (e) {
   }
 });
 
+/**
+ * A fila acompanha o que os OUTROS agentes fazem.
+ *
+ * Antes só reagia a duas coisas: uma oferta a tocar e uma mensagem
+ * nova de parceiro. Não reagia a outro agente pegar ou fechar uma
+ * conversa — e com dois agentes isso quebra:
+ *
+ *   A vê três conversas livres.
+ *   B pega a segunda.
+ *   A continua a vê-la livre; nada o avisou.
+ *   A clica -> "Somebody else got there first".
+ *
+ * O erro estava tratado, mas a lista mentiu-lhe. É isso que corrói
+ * a confiança na ferramenta.
+ *
+ * Agora escuta UPDATE nas duas tabelas de conversa, e as mensagens
+ * dos três públicos e não só dos parceiros.
+ */
 function subscribeDesk() {
   if (desk.channel) return;
 
-  desk.channel = client.channel('admin-partner-chat')
+  desk.channel = client.channel('desk-live')
+
+    // ---------- ofertas a tocar ----------
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'chat_offers'
     }, function (payload) {
       var offer = payload.new;
 
       // Só as minhas, e só as que ainda estão a tocar.
-      if (offer.agent_id !== (adminId())) return;
+      if (offer.agent_id !== adminId()) return;
       if (offer.outcome !== 'ringing') return;
 
-      loadDesk();
+      pedirFila();
     })
+
+    // ---------- mensagens de parceiro ----------
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'partner_messages'
     }, function (payload) {
-      var m = payload.new;
-      if (m.sender !== 'partner') return;
-
-      // Se é a conversa aberta, entra na janela. Se não, é um aviso.
-      if (m.chat_id === desk.current) {
-        desk.messages.push(m);
-        renderThread();
-        loadDesk();
-        return;
-      }
-
-      loadDesk();
-
-      /**
-       * Um aviso de cada vez.
-       *
-       * Se a janela de chamada está a tocar, ela já diz tudo o que
-       * este aviso diria — e com um contador que este não tem.
-       *
-       * O atraso existe porque a mensagem chega pelo tempo real
-       * ANTES de o loadDesk trazer a oferta: sem esperar, o ring.offer
-       * ainda está vazio e os dois avisos aparecem. Um segundo chega
-       * para a oferta chegar e o aviso decidir que não é preciso.
-       */
-      setTimeout(function () {
-        if (ring.offer) return;
-        chatWaitingAlert();
-      }, 1200);
+      mensagemNova(payload.new, 'partner');
     })
+
+    // ---------- mensagens de cliente e de agência ----------
+    //
+    // Estas nem existiam. Uma mensagem nova de um cliente não
+    // aparecia até alguém recarregar a página — e as duas filas
+    // novas ficavam paradas.
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'support_messages'
+    }, function (payload) {
+      var m = payload.new;
+      mensagemNova({
+        chat_id: m.chat_id,
+        sender: m.sender_type,
+        body: m.message,
+        sender_name: m.sender_name,
+        created_at: m.created_at,
+        internal: m.internal
+      }, 'user');
+    })
+
+    /**
+     * Uma conversa mudou de mãos, fechou, ou ficou atrasada.
+     *
+     * É o que faltava. O assigned_to muda quando alguém pega; o
+     * status quando alguém fecha; o warn_level de minuto a minuto
+     * quando o support_tick marca uma espera longa.
+     *
+     * Nenhuma dessas coisas chegava ao ecrã.
+     */
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'partner_chats'
+    }, function () {
+      pedirFila();
+    })
+
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'support_chats'
+    }, function () {
+      pedirFila();
+    })
+
+    /**
+     * Um agente entrou, saiu, ou mudou de estado.
+     *
+     * A barra da equipa mostrava quem estava ao serviço no momento
+     * em que a página abriu, e mais nada.
+     */
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'support_presence'
+    }, function (payload) {
+      // Se sou eu, o estado pode ter mudado do lado do servidor —
+      // uma escalada, um chat que fechou. O ecrã acompanha.
+      if (payload.new && payload.new.user_id === adminId()) {
+        sincronizarEstado();
+      }
+    })
+
     .subscribe();
+}
+
+/**
+ * Uma mensagem nova, venha de que fila vier.
+ *
+ * Os parceiros e os clientes guardam as mensagens em tabelas
+ * diferentes com nomes de coluna diferentes. Aqui já chegam
+ * normalizadas — o resto do painel não precisa de saber a
+ * diferença.
+ */
+function mensagemNova(m, deQuem) {
+  // As notas internas entre agentes não avisam ninguém: já estão
+  // no ecrã de quem as escreveu.
+  if (m.internal) return;
+  if (m.sender !== deQuem) return;
+
+  // Se é a conversa aberta, entra na janela.
+  if (m.chat_id === desk.current) {
+    desk.messages.push(m);
+    renderThread();
+    pedirFila();
+    return;
+  }
+
+  pedirFila();
+
+  /**
+   * Um aviso de cada vez.
+   *
+   * Se a janela de chamada está a tocar, ela já diz tudo o que
+   * este aviso diria — e com um contador que este não tem.
+   *
+   * O atraso existe porque a mensagem chega pelo tempo real ANTES
+   * de a fila trazer a oferta: sem esperar, o ring.offer ainda
+   * está vazio e os dois avisos aparecem.
+   */
+  setTimeout(function () {
+    if (ring.offer) return;
+    chatWaitingAlert();
+  }, 1200);
+}
+
+/**
+ * Pede a fila, mas no máximo uma vez por segundo.
+ *
+ * Sem isto, dez mensagens a chegar juntas — o que acontece quando
+ * um agente responde a três conversas seguidas — davam dez idas ao
+ * servidor a dois segundos cada. O painel engasgava-se.
+ *
+ * O primeiro pedido parte já; os que chegarem no segundo seguinte
+ * juntam-se num só.
+ */
+var filaPedida = 0;
+var filaAgendada = null;
+
+/**
+ * Uma rede de segurança, de dez em dez segundos.
+ *
+ * O tempo real do Supabase é fiável mas não é garantido: uma
+ * ligação que cai e volta pode perder eventos, e o painel não dá
+ * por isso — fica a mostrar uma fila que já não existe.
+ *
+ * Dez segundos é o compromisso: um agente não repara na diferença,
+ * e são só seis pedidos por minuto.
+ *
+ * Só corre quando o separador está VISÍVEL. Um painel em segundo
+ * plano não precisa de estar atualizado, e os browsers travam os
+ * temporizadores de qualquer forma.
+ */
+function arrancarFilaPeriodica() {
+  if (desk.filaTimer) return;
+
+  desk.filaTimer = setInterval(function () {
+    if (document.hidden) return;
+    if (activeTab !== 'chatTab') return;
+
+    loadDesk();
+  }, 10000);
+}
+
+function pedirFila() {
+  var agora = Date.now();
+
+  if (agora - filaPedida > 1000) {
+    filaPedida = agora;
+    loadDesk();
+    return;
+  }
+
+  if (filaAgendada) return;
+
+  filaAgendada = setTimeout(function () {
+    filaAgendada = null;
+    filaPedida = Date.now();
+    loadDesk();
+  }, 1000);
 }
 
 // ============================================================
@@ -6158,6 +6374,16 @@ function avisarSessaoMorta() {
   sessaoMorta = true;
 
   /**
+   * Parar de pedir a fila.
+   *
+   * Sem sessão, cada pedido devolve 403. De dez em dez segundos,
+   * indefinidamente, com a página aberta — enche a consola de
+   * erros e o servidor de pedidos inúteis.
+   */
+  if (desk.filaTimer) { clearInterval(desk.filaTimer); desk.filaTimer = null; }
+  if (filaAgendada) { clearTimeout(filaAgendada); filaAgendada = null; }
+
+  /**
    * Uma sessão que morre a meio de um turno não pode ser silenciosa.
    *
    * O agente continuaria a ver a fila antiga, a carregar em botões
@@ -6674,6 +6900,10 @@ async function init() {
 
   subscribeToAllConversations();
   watchLive();
+
+  // A fila acompanha os outros agentes: por eventos, e por relógio
+  // como rede de segurança.
+  arrancarFilaPeriodica();
 }
 
 (async function boot() {

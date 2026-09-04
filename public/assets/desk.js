@@ -1796,10 +1796,29 @@ function ajustarActive() {
   if (desk.state !== devia) setDeskState(devia, true);
 }
 
+/**
+ * Quem manda nesta conversa, e o que se pode fazer nela.
+ *
+ * Três situações, não duas:
+ *
+ *   é minha        respondo, fecho, escalo
+ *   está livre     pego e passa a ser minha
+ *   é de outro     ENTRO — leio, escrevo, e o dono continua a ser
+ *                  ele. Ou tomo conta, se ele desapareceu.
+ *
+ * A terceira não existia: o painel recusava e ficava por ali. Um
+ * agente que precisasse de ajuda não a conseguia pedir, e uma
+ * conversa de alguém que saiu ficava presa para sempre.
+ */
 function paintChatOwnership(chat) {
   var mine = chat.assigned_to === adminId();
   var free = !chat.assigned_to;
   var bar = el('chatClaimBar');
+
+  // Estou dentro se é minha, ou se entrei nela.
+  var dentro = mine || (chat.watchers || []).some(function (w) {
+    return w.agent_id === adminId();
+  });
 
   el('chatUrgentBtn').classList.toggle('hidden', !mine);
   el('chatCloseBtn').classList.toggle('hidden', !mine);
@@ -1809,57 +1828,135 @@ function paintChatOwnership(chat) {
   el('chatReleaseBtn').classList.toggle('hidden', !mine);
   el('chatUrgentBtn').textContent = chat.urgent ? 'Remove urgent' : 'Flag urgent';
 
-  document.querySelector('.desk-foot').classList.toggle('locked', !mine);
-  document.querySelector('.desk-mode').classList.toggle('locked', !mine);
+  // Escrever: qualquer pessoa que esteja dentro. Só ler quando não
+  // se entrou ainda.
+  document.querySelector('.desk-foot').classList.toggle('locked', !dentro);
+  document.querySelector('.desk-mode').classList.toggle('locked', !dentro);
 
   if (mine) {
     bar.classList.add('hidden');
+    pintarQuemEsta(chat);
     return;
   }
 
-  el('chatClaimText').textContent = free
-    ? 'Waiting for someone.'
-    : 'With ' + (chat.assigned_agent_name || 'another agent') +
-      '. You can read along.';
+  if (free) {
+    el('chatClaimText').textContent = 'Waiting for someone.';
+    el('chatTakeBtn').textContent = 'Take this chat';
+    el('chatJoinBtn').classList.add('hidden');
+  } else {
+    /**
+     * Já tem dono. Dizer QUEM, e dar duas saídas.
+     *
+     * O painel dizia "already taken" e pronto. Saber que é o Rick
+     * muda tudo: sabe-se a quem perguntar, e se ele está ali ao
+     * lado resolve-se numa frase.
+     */
+    var quem = chat.assigned_agent_name || 'another agent';
 
-  el('chatTakeBtn').textContent = free ? 'Take this chat' : 'Take it over';
+    el('chatClaimText').textContent = 'Session with ' + quem + '.';
+    el('chatTakeBtn').textContent = 'Take it over';
+    el('chatJoinBtn').classList.remove('hidden');
+  }
+
   el('chatTakeBtn').disabled = false;
   bar.classList.remove('hidden');
+
+  pintarQuemEsta(chat);
+}
+
+/**
+ * Os outros agentes que estão nesta conversa.
+ *
+ * Sem isto, dois agentes escrevem ao mesmo tempo sem saber um do
+ * outro — e o parceiro recebe duas respostas diferentes à mesma
+ * pergunta.
+ */
+function pintarQuemEsta(chat) {
+  var caixa = el('chatWatchers');
+  if (!caixa || caixa.__missing) return;
+
+  var outros = (chat.watchers || []).filter(function (w) {
+    return w.agent_id !== adminId() && w.agent_id !== chat.assigned_to;
+  });
+
+  if (!outros.length) {
+    caixa.hidden = true;
+    return;
+  }
+
+  caixa.hidden = false;
+  caixa.innerHTML = '<span class="wt-label">Also here</span>' +
+    outros.map(function (w) {
+      return '<span class="wt">' + escapeHtml(iniciais(w.name || '?')) + '</span>';
+    }).join('');
 }
 
 el('chatTakeBtn').addEventListener('click', async function () {
   if (!desk.current) return;
 
-  var chat = desk.chats.find(function (c) { return c.chat_id === desk.current; });
+  var chat = chatAtual();
+  var apoio = audAtual === 'customers' || audAtual === 'agents';
 
-  if (chat && chat.assigned_to && chat.assigned_to !== adminId()) {
-    if (!await perguntar('Take this over', 'Take this over from ' +
-        (chat.assigned_agent_name || 'the other agent') + '?\n\n' +
-        'They lose it from their list. Only do this if they have stepped away.')) return;
-
-    // Largar a de outro exige tirá-la primeiro: o claim só pega
-    // conversas livres, e isso é de propósito.
-    try {
-      await deskFetch('/api/admin/chat/release', { chat_id: desk.current, close: false });
-    } catch (e) {
-      avisar('Heads up', e.message);
-      return;
-    }
+  // Livre: pega-se e passa a ser minha.
+  if (!chat.assigned_to) {
+    await pegarConversa(desk.current);
+    return;
   }
 
-  el('chatTakeBtn').disabled = true;
+  /**
+   * Tem dono. Tomar conta tira-lha.
+   *
+   * Só faz sentido se ele saiu mesmo. Se está a trabalhar, o botão
+   * ao lado — "Join" — deixa entrar sem tirar nada a ninguém.
+   */
+  var quem = chat.assigned_agent_name || 'the other agent';
 
-  // A mesma função do botão de atender: uma conversa que já é minha
-  // não pode dar erro, venha o clique de onde vier.
-  var ok = await pegarConversa(desk.current);
+  if (!await perguntar('Take it over',
+      'This moves the conversation from ' + quem + ' to you.\n\n' +
+      'They lose it from their list. If they are still working, use Join ' +
+      'instead — you can both be in it.')) return;
 
-  if (ok) {
-    var updated = desk.chats.find(function (c) { return c.chat_id === desk.current; });
-    if (updated) paintChatOwnership(updated);
-    el('chatReply').focus();
+  try {
+    await deskFetch('/api/admin/chat/takeover', {
+      chat_id: desk.current,
+      kind: apoio ? 'support' : 'partner'
+    });
+
+    await loadDesk();
+    await openDeskChat(desk.current);
+  } catch (e) {
+    avisar('Could not take it over', e.message);
   }
+});
 
-  el('chatTakeBtn').disabled = false;
+/**
+ * Entrar sem tirar a ninguém.
+ *
+ * Os dois ficam, os dois podem escrever, e o nome vai em cada
+ * mensagem. Um agente que precise de ajuda passa a poder pedi-la
+ * sem escalar formalmente — e um supervisor pode acompanhar sem
+ * interromper.
+ */
+el('chatJoinBtn').addEventListener('click', async function () {
+  if (!desk.current) return;
+
+  var apoio = audAtual === 'customers' || audAtual === 'agents';
+
+  el('chatJoinBtn').disabled = true;
+
+  try {
+    await deskFetch('/api/admin/chat/join', {
+      chat_id: desk.current,
+      kind: apoio ? 'support' : 'partner'
+    });
+
+    await loadDesk();
+    await openDeskChat(desk.current);
+  } catch (e) {
+    avisar('Could not join', e.message);
+  } finally {
+    el('chatJoinBtn').disabled = false;
+  }
 });
 
 /** A conversa aberta, ou um objeto vazio para não rebentar. */
@@ -5860,6 +5957,96 @@ el('ptStatusFilter').addEventListener('change', function () {
 // papel authenticated — e o admin também é authenticated. Sem isso,
 // um agente aprovava-se a si próprio com um update no browser.
 // ============================================================
+/**
+ * A sessão renova-se sozinha, e o painel dá por isso.
+ *
+ * O autoRefreshToken do Supabase renova o token de hora a hora, mas
+ * só enquanto a página está viva e visível. Um separador em segundo
+ * plano durante a noite acorda com o token expirado, e o painel só
+ * descobria isso quando o pedido seguinte falhava — a meio de um
+ * turno, com conversas abertas.
+ *
+ * Isto faz três coisas:
+ *
+ *  - Renova à força quando o separador volta à frente.
+ *  - Ouve o evento de renovação e continua sem interromper nada.
+ *  - Se a sessão morrer mesmo, diz porquê em vez de deixar o
+ *    painel a falhar em silêncio.
+ */
+(function vigiarSessao() {
+  client.auth.onAuthStateChange(function (evento, sessao) {
+    if (evento === 'TOKEN_REFRESHED') {
+      // Renovou-se sozinha. Não há nada a fazer — mas convém saber
+      // que aconteceu quando se lê a consola à procura de um
+      // problema.
+      console.log('[desk] session refreshed');
+      return;
+    }
+
+    if (evento === 'SIGNED_OUT' || (!sessao && currentAdmin)) {
+      console.warn('[desk] session ended');
+      avisarSessaoMorta();
+    }
+  });
+
+  /**
+   * Ao voltar ao separador, renova já.
+   *
+   * O browser suspende os temporizadores de separadores em segundo
+   * plano. Depois de umas horas escondido, o relógio de renovação
+   * do Supabase não correu — e a primeira coisa que o agente faz ao
+   * voltar é carregar num botão que falha.
+   */
+  document.addEventListener('visibilitychange', async function () {
+    if (document.hidden || !currentAdmin) return;
+
+    try {
+      var r = await client.auth.getSession();
+
+      if (!r.data || !r.data.session) {
+        return avisarSessaoMorta();
+      }
+
+      // Se falta menos de dez minutos, força a renovação em vez de
+      // esperar pelo relógio.
+      var expira = (r.data.session.expires_at || 0) * 1000;
+
+      if (expira && expira - Date.now() < 10 * 60000) {
+        await client.auth.refreshSession();
+        console.log('[desk] session refreshed on focus');
+      }
+
+      // E recarrega a fila: enquanto estivemos fora, o mundo mudou.
+      loadDesk();
+    } catch (e) {
+      console.error('[desk] session check:', e.message);
+    }
+  });
+})();
+
+var sessaoMorta = false;
+
+function avisarSessaoMorta() {
+  if (sessaoMorta) return;
+  sessaoMorta = true;
+
+  /**
+   * Uma sessão que morre a meio de um turno não pode ser silenciosa.
+   *
+   * O agente continuaria a ver a fila antiga, a carregar em botões
+   * que não fazem nada, e as conversas dele ficariam sem ninguém
+   * sem que ele soubesse.
+   */
+  document.body.setAttribute('data-duty', 'offline');
+
+  avisar('Your session ended',
+    'You have been signed out — this happens if the browser sat idle for a ' +
+    'long time. Your conversations are still assigned to you. Sign in again ' +
+    'to pick them up.').then(function () {
+      window.location.reload();
+    });
+}
+
 async function authHeaders() {
   var s = await client.auth.getSession();
   var token = s.data && s.data.session && s.data.session.access_token;

@@ -5623,6 +5623,30 @@ function needsAction(p) {
   return false;
 }
 
+/**
+ * Já entregou tudo e está à espera de uma decisão.
+ *
+ * Diferente de "needs action", que inclui quem submeteu mas ainda
+ * tem papéis em falta. Este filtro é para quem só falta carregar
+ * num botão — e é onde uma candidatura parada custa um parceiro.
+ */
+function readyToApprove(p) {
+  if (p.status === 'approved' || p.status === 'rejected') return false;
+
+  var need = (p._reqs || []).filter(function (r) {
+    return r.scope === 'company' && r.stage === 'signup' && r.mandatory;
+  });
+
+  if (!need.length) return false;
+
+  return need.every(function (r) {
+    return (p._docs || []).some(function (d) {
+      return d.requirement_code === r.code && !d.driver_id &&
+        !d.vehicle_id && d.status === 'approved';
+    });
+  });
+}
+
 function activationComplete(p) {
   var need = (p._reqs || []).filter(function (r) { return r.mandatory && r.stage === 'activation'; });
 
@@ -5696,7 +5720,8 @@ function renderPartners() {
 
   // 'all' e vazio mostram tudo. Sem esta linha o 'all' era tratado
   // como um estado e a lista vinha vazia.
-  if (ptFilters.status === 'needs') list = list.filter(needsAction);
+  if (ptFilters.status === 'ready') list = list.filter(readyToApprove);
+  else if (ptFilters.status === 'needs') list = list.filter(needsAction);
   else if (ptFilters.status && ptFilters.status !== 'all') {
     list = list.filter(function (p) { return p.status === ptFilters.status; });
   }
@@ -5804,6 +5829,60 @@ function renderPartners() {
     }
     actions += '</div>';
 
+    /**
+     * O ponto da situação, numa linha.
+     *
+     * Os documentos apareciam um a um, e para saber se faltava
+     * alguma coisa era preciso lê-los todos. Com sete requisitos e
+     * vinte candidaturas, ninguém faz isso.
+     *
+     * Esta barra responde à pergunta que se faz primeiro: falta
+     * alguma coisa, ou está pronto para decidir?
+     */
+    var entregues = signupReqs.filter(function (r) {
+      return (p._docs || []).some(function (x) {
+        return x.requirement_code === r.code && !x.driver_id && !x.vehicle_id;
+      });
+    }).length;
+
+    var aprovados = signupReqs.filter(function (r) {
+      return (p._docs || []).some(function (x) {
+        return x.requirement_code === r.code && !x.driver_id &&
+          !x.vehicle_id && x.status === 'approved';
+      });
+    }).length;
+
+    var recusados = (p._docs || []).filter(function (x) {
+      return x.status === 'rejected';
+    }).length;
+
+    var expirados = (p._docs || []).filter(function (x) {
+      return x.expires_on && new Date(x.expires_on) < new Date();
+    }).length;
+
+    var total = signupReqs.length;
+    var completo = total > 0 && aprovados === total;
+
+    var barra = '<div class="pt-prog' + (completo ? ' done' : '') + '">' +
+      '<div class="pt-bar"><i style="width:' +
+      (total ? Math.round(aprovados / total * 100) : 0) + '%"></i>' +
+      '<u style="width:' +
+      (total ? Math.round(entregues / total * 100) : 0) + '%"></u></div>' +
+      '<span class="pt-prog-n">' + aprovados + '/' + total + ' approved</span>' +
+      (entregues > aprovados
+        ? '<span class="pt-tag wait">' + (entregues - aprovados) + ' to review</span>'
+        : '') +
+      (total > entregues
+        ? '<span class="pt-tag miss">' + (total - entregues) + ' missing</span>'
+        : '') +
+      (recusados
+        ? '<span class="pt-tag bad">' + recusados + ' rejected</span>' : '') +
+      (expirados
+        ? '<span class="pt-tag bad">' + expirados + ' expired</span>' : '') +
+      (completo && p.status !== 'approved'
+        ? '<span class="pt-tag ok">Ready to approve</span>' : '') +
+      '</div>';
+
     return '<div class="pt-card ' + (needsAction(p) ? 'needs' : '') + '">' +
       '<div class="pt-head"><div>' +
       '<h3>' + escapeHtml(p.legal_name || '(no name)') + '</h3>' +
@@ -5815,6 +5894,10 @@ function renderPartners() {
       (p.submitted_at ? '<br>Submitted ' + escapeHtml(formatTime(p.submitted_at)) : '') +
       '</div></div>' +
       '<span class="status ' + statusClass + '">' + escapeHtml(p.status) + '</span></div>' +
+
+      // O ponto da situação, logo abaixo do nome. É a primeira
+      // pergunta que se faz e era a última a ter resposta.
+      barra +
 
       '<div class="pt-facts">' +
       '<div class="pt-fact"><div class="k">VAT</div><div class="v">' + escapeHtml(p.vat_number || '-') + '</div></div>' +
@@ -6367,10 +6450,23 @@ function paintTabAlerts() {
    * de alguém — uma candidatura de motorista parada uma semana é um
    * motorista que desiste, e um número cinzento não chama ninguém.
    */
+  /**
+   * O contador conta os PRONTOS, não os que estão a meio.
+   *
+   * Contava tudo o que precisava de atenção — incluindo quem ainda
+   * não entregou os papéis. Isso dava um número que nunca descia,
+   * e um número que nunca desce deixa de ser lido.
+   *
+   * Os prontos são os que só precisam de um clique. Esses sim
+   * devem chamar.
+   */
+  var ptReady = (typeof partners !== 'undefined'
+    ? partners.filter(readyToApprove).length : 0);
+
   var ptWaiting = (typeof partners !== 'undefined'
     ? partners.filter(needsAction).length : 0);
 
-  set('partnersBadge', ptWaiting, ptWaiting > 0);
+  set('partnersBadge', ptReady || ptWaiting, ptReady > 0);
 
   var agWaiting = (typeof agents !== 'undefined'
     ? agents.filter(function (a) { return a.status === 'pending'; }).length : 0);

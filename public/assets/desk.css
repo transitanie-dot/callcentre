@@ -18,6 +18,11 @@
     :root{
       --bg:#F4F6F9;--card:#FFFFFF;--card-2:#F0F3F7;
       --primary:#2563EB;--primary-soft:rgba(37,99,235,.10);
+      /* Vários blocos usam --accent e a variável nunca foi
+         definida. Onde isso acontece, o browser ignora a regra
+         inteira — focos sem contorno, pontos sem cor, sublinhados
+         invisíveis. Aqui é um sinónimo de --primary. */
+      --accent:#2563EB;
       --text:#0F1724;--muted:#5A6982;--border:#DDE3EC;--border-soft:#E8ECF2;
       --ok:#047857;--ok-bg:rgba(4,120,87,.10);
       --warn:#B45309;--warn-bg:rgba(180,83,9,.10);
@@ -31,6 +36,7 @@
     html[data-theme="dark"]{
       --bg:#0B111C;--card:#141C2B;--card-2:#1A2436;
       --primary:#4F8EF7;--primary-soft:rgba(79,142,247,.14);
+      --accent:#4F8EF7;
       --text:#E8EDF5;--muted:#8494AC;--border:#243044;--border-soft:#1C2637;
       --ok:#34D399;--ok-bg:rgba(52,211,153,.12);
       --warn:#F5B457;--warn-bg:rgba(245,180,87,.12);
@@ -1322,3 +1328,23 @@
   border:1px solid var(--border)}
 .claim-btn.line:hover{border-color:var(--accent);color:var(--accent)}
 .claim-btn.hidden{display:none!important}
+
+/* ============================================================
+   O ECRÃ DE ESPERA
+
+   Enquanto se verifica a sessão. Era uma caixa a dizer "Checking
+   your session" — que é o que o programa está a fazer, não o que
+   a pessoa quer saber.
+
+   A marca a esbater diz que está a carregar sem explicar mecânica
+   nenhuma, e é o mesmo que o portal de motoristas mostra.
+   ============================================================ */
+.boot-wait{position:fixed;inset:0;z-index:300;background:var(--bg);
+  display:flex;align-items:center;justify-content:center}
+.boot-wait.hidden{display:none!important}
+.boot-mark{font-family:var(--display);font-weight:800;font-size:21px;
+  letter-spacing:-.025em;color:var(--text);opacity:.35;
+  animation:bootFade 1.2s ease-in-out infinite}
+.boot-mark span{color:var(--accent)}
+@keyframes bootFade{0%,100%{opacity:.35}50%{opacity:.7}}
+@media (prefers-reduced-motion:reduce){.boot-mark{animation:none}}

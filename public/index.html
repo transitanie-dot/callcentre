@@ -46,7 +46,15 @@
     <div class="boot-mark">AIRPORT<span>LINK</span></div>
   </div>
 
-  <div id="adminApp" class="hidden"><div class="container">
+  <div id="adminApp" class="hidden">
+    <!-- Se o trabalho de fundo parar, nada avisa: o painel
+         continua a funcionar. Isto avisa. -->
+    <div class="tick-warn" id="tickWarn">
+      Background jobs have stopped. Nobody is being alerted about waiting
+      conversations. Tell whoever runs the server.
+    </div>
+
+    <div class="container">
     <div class="header">
       <div><h1>AIRPORT<b style="color:var(--warn)">LINK</b> &middot; Operations</h1><div class="who" id="adminWhoami"></div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -131,8 +139,8 @@
       </button>
     </div>
 
-    <textarea id="closeNote" rows="2" maxlength="400"
-      placeholder="Anything worth knowing later (optional)"></textarea>
+    <textarea id="closeNote" rows="3" maxlength="400"
+      placeholder="How was it resolved? One sentence is enough."></textarea>
 
     <div class="ask-btns">
       <button class="clear-btn" id="closeCancel" type="button">Cancel</button>
@@ -633,17 +641,26 @@
       <!-- A mesma pesquisa que o separador de clientes tem.
            Um agente que atenda os três públicos não devia ter de
            mudar de método conforme quem está do outro lado. -->
+      <!-- As três vistas da fila.
+           Estavam dentro de uma lista escondida, onde ninguém as
+           encontrava. São a coisa mais usada do painel: quem está
+           à espera, quem já tem alguém, e o que é meu. -->
+      <div class="q-views" id="qViews">
+        <button class="q-view on" data-view="waiting" type="button">
+          Waiting <span class="q-n" id="qnWaiting">0</span>
+        </button>
+        <button class="q-view" data-view="taken" type="button">
+          With an agent <span class="q-n" id="qnTaken">0</span>
+        </button>
+        <button class="q-view" data-view="mine" type="button">
+          Mine <span class="q-n" id="qnMine">0</span>
+        </button>
+        <button class="q-view" data-view="closed" type="button">Closed</button>
+      </div>
+
       <div class="desk-search">
         <input type="text" id="deskSearch" class="search-input"
                placeholder="Company, email, ticket or message">
-        <select id="deskSearchState" class="search-input">
-          <option value="">Any status</option>
-          <option value="waiting">Waiting for someone</option>
-          <option value="mine">Mine</option>
-          <option value="taken">With another agent</option>
-          <option value="late">Unanswered 3 min or more</option>
-          <option value="closed">Closed by me</option>
-        </select>
         <button class="clear-btn" id="deskSearchClear" type="button">Clear</button>
       </div>
 
@@ -699,6 +716,15 @@
                  escrevem ao mesmo tempo sem saber um do outro, e o
                  parceiro recebe duas respostas à mesma pergunta. -->
             <div class="watchers" id="chatWatchers" hidden></div>
+
+            <!-- Aos três minutos fica âmbar, aos cinco vermelho.
+                 O agente promete três minutos e não tinha como
+                 saber se os estava a cumprir. -->
+            <div class="reply-clock" id="replyClock" hidden>
+              <span class="rc-dot"></span>
+              <span class="rc-time" id="rcTime">0:00</span>
+              <span class="rc-label" id="rcLabel">since they wrote</span>
+            </div>
 
             <div class="desk-head">
               <div>

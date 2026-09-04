@@ -1296,3 +1296,29 @@
   .duty-menu{left:0;right:0;min-width:0}
   .deskbar{flex-direction:column;align-items:stretch;gap:10px}
 }
+
+/* ============================================================
+   QUEM MAIS ESTÁ NA CONVERSA
+
+   Sem isto, dois agentes escrevem ao mesmo tempo sem saber um do
+   outro — e o parceiro recebe duas respostas diferentes à mesma
+   pergunta.
+   ============================================================ */
+.watchers{display:flex;align-items:center;gap:7px;padding:8px 20px;
+  background:var(--card-2);border-bottom:1px solid var(--border)}
+.watchers[hidden]{display:none!important}
+.wt-label{font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  margin-right:2px}
+.wt{width:24px;height:24px;border-radius:999px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;
+  font-family:var(--display);font-weight:700;font-size:10px}
+
+/* O botão de entrar, ao lado do de tomar conta. Menos peso: entrar
+   é o caminho seguro, tomar conta é que tira algo a alguém — mas é
+   este que tem de parecer a exceção, não o contrário. */
+.claim-btn.line{background:transparent;color:var(--text);
+  border:1px solid var(--border)}
+.claim-btn.line:hover{border-color:var(--accent);color:var(--accent)}
+.claim-btn.hidden{display:none!important}

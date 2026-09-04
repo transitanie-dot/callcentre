@@ -1556,7 +1556,7 @@ function renderDesk() {
    * lista de trabalho não deve ter dentro o que já está feito, mas
    * também não devia ser preciso ir a outro lado para o encontrar.
    */
-  if (el('deskSearchState').value === 'closed' && fechadas.length) {
+  if (vistaAtual === 'closed' && fechadas.length) {
     html += '<div class="list-head">Closed by me <span>' + fechadas.length +
       '</span></div>' + fechadas.map(function (c) {
         return '<button class="chat-row" data-closed="' + escapeHtml(c.chat_id) +
@@ -1586,8 +1586,7 @@ function renderDesk() {
   if (limpar) {
     limpar.addEventListener('click', function () {
       el('deskSearch').value = '';
-      el('deskSearchState').value = '';
-      renderDesk();
+          renderDesk();
     });
   }
 
@@ -1641,6 +1640,16 @@ async function openDeskChat(chatId) {
   // O parceiro passa a ver que o que escreveu chegou. É daí que vêm
   // as mensagens repetidas quando não há resposta imediata.
   deskFetch('/api/admin/chat/read', { chat_id: chatId }).catch(function () {});
+
+  /**
+   * Dizer aos colegas que estou aqui.
+   *
+   * Ao abrir e depois de meio em meio minuto. Sem isto, dois
+   * agentes escrevem ao mesmo tempo sem saber um do outro — e o
+   * parceiro recebe duas respostas diferentes à mesma pergunta.
+   */
+  marcarPresenca(chatId);
+  arrancarRelogioResposta(chatAtual());
   // O histórico é do parceiro anterior; trocar de conversa fecha-o.
   el('histPanel').hidden = true;
   el('histRead').hidden = true;
@@ -1884,6 +1893,112 @@ function paintChatOwnership(chat) {
  * outro — e o parceiro recebe duas respostas diferentes à mesma
  * pergunta.
  */
+// ============================================================
+// O RELÓGIO DA RESPOSTA
+//
+// Conta desde a última mensagem do parceiro. Aos três minutos fica
+// âmbar, aos cinco vermelho — os mesmos limites que o servidor usa
+// para marcar a conversa como atrasada.
+//
+// O agente promete três minutos e não tinha como saber se os
+// estava a cumprir.
+// ============================================================
+var relogio = { desde: null, timer: null };
+
+function arrancarRelogioResposta(chat) {
+  pararRelogioResposta();
+
+  var caixa = el('replyClock');
+  if (!caixa || caixa.__missing) return;
+
+  // Só conta se a bola está do NOSSO lado: eles escreveram e
+  // ninguém respondeu ainda.
+  var espera = chat && chat.awaiting_reply_minutes;
+
+  if (!espera && espera !== 0) { caixa.hidden = true; return; }
+
+  if (!chat.last_user_msg_at && !chat.last_message_at) {
+    caixa.hidden = true;
+    return;
+  }
+
+  // O servidor diz há quantos minutos espera. Daí para a frente o
+  // browser conta — mas parte sempre do número dele.
+  relogio.desde = Date.now() - (Number(espera) || 0) * 60000;
+
+  caixa.hidden = false;
+  pintarRelogioResposta();
+
+  relogio.timer = setInterval(pintarRelogioResposta, 1000);
+}
+
+function pintarRelogioResposta() {
+  var caixa = el('replyClock');
+  if (!caixa || caixa.__missing || !relogio.desde) return;
+
+  var seg = Math.max(0, Math.round((Date.now() - relogio.desde) / 1000));
+
+  el('rcTime').textContent =
+    Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0');
+
+  // Os mesmos limites do servidor. Se divergissem, o agente veria
+  // verde enquanto a conversa já estava marcada como atrasada.
+  caixa.classList.toggle('warn', seg >= 180 && seg < 300);
+  caixa.classList.toggle('late', seg >= 300);
+
+  el('rcLabel').textContent = seg >= 300
+    ? 'they have been waiting'
+    : seg >= 180
+      ? 'past the three minutes'
+      : 'since they wrote';
+}
+
+function pararRelogioResposta() {
+  if (relogio.timer) { clearInterval(relogio.timer); relogio.timer = null; }
+  relogio.desde = null;
+
+  var caixa = el('replyClock');
+  if (caixa && !caixa.__missing) {
+    caixa.hidden = true;
+    caixa.classList.remove('warn', 'late');
+  }
+}
+
+/**
+ * Diz que estou nesta conversa, e continua a dizê-lo.
+ *
+ * De trinta em trinta segundos. O servidor considera ausente quem
+ * não dá sinal há dois minutos — quatro batidas de folga, porque
+ * uma rede lenta não deve fazer um agente desaparecer da vista dos
+ * colegas.
+ */
+var presencaTimer = null;
+
+function marcarPresenca(chatId) {
+  pararPresenca();
+
+  if (!chatId) return;
+
+  var apoio = audAtual === 'customers' || audAtual === 'agents';
+  var chat = chatAtual();
+  var modo = (chat && chat.assigned_to === adminId()) ? 'handling' : 'viewing';
+
+  var bater = function () {
+    deskFetch('/api/admin/chat/presence', {
+      chat_id: chatId,
+      kind: apoio ? 'support' : 'partner',
+      mode: modo
+    }).catch(function () {});
+  };
+
+  bater();
+  presencaTimer = setInterval(bater, 30000);
+}
+
+function pararPresenca() {
+  if (presencaTimer) { clearInterval(presencaTimer); presencaTimer = null; }
+}
+
 function pintarQuemEsta(chat) {
   var caixa = el('chatWatchers');
   if (!caixa || caixa.__missing) return;
@@ -1897,11 +2012,23 @@ function pintarQuemEsta(chat) {
     return;
   }
 
+  /**
+   * Quem atende e quem lê são coisas diferentes.
+   *
+   * Antes apareciam iguais, e o agente não sabia se podia escrever
+   * ou se atrapalhava. "Rick is in this chat" e "Rick is viewing"
+   * levam a decisões opostas.
+   */
   caixa.hidden = false;
-  caixa.innerHTML = '<span class="wt-label">Also here</span>' +
-    outros.map(function (w) {
-      return '<span class="wt">' + escapeHtml(iniciais(w.name || '?')) + '</span>';
-    }).join('');
+
+  caixa.innerHTML = outros.map(function (w) {
+    var atende = w.mode === 'handling';
+
+    return '<span class="wt">' + escapeHtml(iniciais(w.name || '?')) + '</span>' +
+      '<span class="wt-mode ' + (atende ? 'handling' : 'viewing') + '">' +
+      escapeHtml(w.name || 'Someone') + ' is ' +
+      (atende ? 'in this chat' : 'viewing') + '</span>';
+  }).join('');
 }
 
 el('chatTakeBtn').addEventListener('click', async function () {
@@ -2339,10 +2466,62 @@ var audAtual = 'drivers';
  * agente que atenda os três públicos não devia ter de mudar de
  * método conforme quem está do outro lado.
  */
+// ============================================================
+// AS TRÊS VISTAS DA FILA
+//
+// Estavam dentro de uma lista escondida, onde ninguém as
+// encontrava. São a coisa mais usada do painel.
+//
+// Uma conversa com dono CONTINUA a aparecer — só noutra vista. Dois
+// agentes podem trabalhar a mesma, e esconder o que já tem alguém
+// impedia isso.
+// ============================================================
+var vistaAtual = 'waiting';
+
+qsa('[data-view]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    vistaAtual = b.getAttribute('data-view');
+
+    qsa('[data-view]').forEach(function (x) {
+      x.classList.toggle('on', x === b);
+    });
+
+    // As fechadas vêm de outra chamada: são muitas e raramente se
+    // olha para elas.
+    if (vistaAtual === 'closed' && !fechadas.length) {
+      carregarFechadas();
+    } else {
+      renderDesk();
+    }
+  });
+});
+
+/** Os contadores de cada vista, para se ver sem clicar. */
+function pintarVistas(lista) {
+  var meu = adminId();
+
+  var n = {
+    waiting: lista.filter(function (c) { return !c.assigned_to; }).length,
+    taken: lista.filter(function (c) {
+      return c.assigned_to && c.assigned_to !== meu;
+    }).length,
+    mine: lista.filter(function (c) { return c.assigned_to === meu; }).length
+  };
+
+  ['waiting', 'taken', 'mine'].forEach(function (k) {
+    var el2 = el('qn' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (el2 && !el2.__missing) el2.textContent = n[k];
+  });
+
+  // A vista de quem espera fica vermelha quando há alguém à
+  // espera. É a única que grita, porque é a única onde esperar
+  // custa.
+  var wb = document.querySelector('[data-view="waiting"]');
+  if (wb) wb.classList.toggle('hot', n.waiting > 0);
+}
+
 function filtrarConversas(lista) {
   var q = (el('deskSearch').value || '').trim().toLowerCase();
-  var estado = el('deskSearchState').value || '';
-
   return (lista || []).filter(function (c) {
     if (q) {
       var campos = [c.trading_name, c.legal_name, c.email, c.ticket_number,
@@ -2353,31 +2532,28 @@ function filtrarConversas(lista) {
       if (!achou) return false;
     }
 
-    if (estado === 'waiting') return !c.assigned_to;
-    if (estado === 'mine') return c.assigned_to === adminId();
-    if (estado === 'taken') return c.assigned_to && c.assigned_to !== adminId();
-    if (estado === 'late') return (c.awaiting_reply_minutes || 0) >= 3;
+    /**
+     * A vista decide o que se mostra.
+     *
+     * Uma conversa com dono CONTINUA a aparecer — só noutra vista.
+     * Dois agentes podem trabalhar a mesma, e esconder o que já tem
+     * alguém impedia isso.
+     */
+    if (vistaAtual === 'waiting') return !c.assigned_to;
+    if (vistaAtual === 'mine') return c.assigned_to === adminId();
+    if (vistaAtual === 'taken') return c.assigned_to && c.assigned_to !== adminId();
     // 'closed' esconde as abertas: as fechadas vêm de outra lista.
-    if (estado === 'closed') return false;
+    if (vistaAtual === 'closed') return false;
 
     return true;
   });
 }
 
 el('deskSearch').addEventListener('input', renderDesk);
-el('deskSearchState').addEventListener('change', function () {
-  // Escolher "closed" vai buscá-las: não se carregam sempre, porque
-  // são muitas e raramente se olha para elas.
-  if (el('deskSearchState').value === 'closed' && !fechadas.length) {
-    carregarFechadas();
-  } else {
-    renderDesk();
-  }
-});
+
 
 el('deskSearchClear').addEventListener('click', function () {
   el('deskSearch').value = '';
-  el('deskSearchState').value = '';
   renderDesk();
 });
 
@@ -2801,6 +2977,24 @@ el('closeCancel').addEventListener('click', function () {
 el('closeGo').addEventListener('click', async function () {
   if (!desk.current) return;
 
+  /**
+   * "Resolvido" exige dizer COMO.
+   *
+   * Um resolved sem resumo não serve de nada a quem abrir a
+   * conversa daqui a um mês — nem ao agente que apanhar o mesmo
+   * parceiro na semana seguinte.
+   *
+   * Os outros motivos não precisam: "não respondeu" já se explica.
+   */
+  var nota = el('closeNote').value.trim();
+
+  if (fecho.motivo === 'resolved' && nota.length < 20) {
+    el('closeNote').focus();
+    return avisar('Say how it was resolved',
+      'A sentence is enough. The next agent to get this partner will read ' +
+      'it, and so will you in a month when you no longer remember.');
+  }
+
   el('closeBack').hidden = true;
   el('closeGo').disabled = true;
 
@@ -2832,6 +3026,8 @@ el('closeGo').addEventListener('click', async function () {
 
   desk.current = null;
   pararRelogio();
+  pararRelogioResposta();
+  pararPresenca();
   el('chatClock').hidden = true;
   el('chatOpen').classList.add('hidden');
   el('chatBlank').classList.remove('hidden');
@@ -3326,6 +3522,27 @@ function hojeLocal() {
  * sozinho durante horas — e um computador que adormece perde a
  * conta sem dar por isso.
  */
+/**
+ * O trabalho de fundo ainda corre?
+ *
+ * Se o cron parar — a conta expira, o segredo muda, o serviço fica
+ * em baixo — as rotinas param. E nada avisa: o painel continua a
+ * funcionar, por isso ninguém repara até alguém notar que há três
+ * dias que ninguém é avisado de nada.
+ */
+async function verificarTrabalhoDeFundo() {
+  var aviso = el('tickWarn');
+  if (!aviso || aviso.__missing) return;
+
+  try {
+    var h = await deskFetch('/api/admin/health');
+    aviso.classList.toggle('on', h && h.healthy === false);
+  } catch (e) {
+    // Uma falha aqui não prova nada sobre o cron: pode ser a rede.
+    // Não se avisa por uma chamada falhada.
+  }
+}
+
 async function sincronizarEstado() {
   try {
     var r = await deskFetch('/api/admin/team');
@@ -3639,6 +3856,7 @@ async function setDeskState(state, aRetomar, desdeQuando) {
        */
       carregarDia();
       sincronizarEstado();
+      verificarTrabalhoDeFundo();
     }, 120000);
   }
 

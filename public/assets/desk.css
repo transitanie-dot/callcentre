@@ -1348,3 +1348,10 @@
 .boot-mark span{color:var(--accent)}
 @keyframes bootFade{0%,100%{opacity:.35}50%{opacity:.7}}
 @media (prefers-reduced-motion:reduce){.boot-mark{animation:none}}
+
+/* Entrar ao serviço. O Live e o Active são automáticos e não se
+   clicam — mas quem está offline precisa de uma porta, e ela só
+   aparece quando faz falta. */
+.duty-in{background:color-mix(in srgb,#16A34A 12%,transparent)}
+.duty-in b{font-weight:600;font-size:14px}
+.duty-in:hover{background:color-mix(in srgb,#16A34A 20%,transparent)}

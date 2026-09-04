@@ -1398,3 +1398,99 @@
   animation:ptReady 2.2s ease-in-out infinite}
 @keyframes ptReady{0%,100%{opacity:1}50%{opacity:.6}}
 @media (prefers-reduced-motion:reduce){.pt-tag.ok{animation:none}}
+
+/* ============================================================
+   AS TRÊS VISTAS DA FILA
+
+   Estavam dentro de uma lista escondida, onde ninguém as
+   encontrava. São a coisa mais usada do painel: quem está à
+   espera, quem já tem alguém, e o que é meu.
+
+   Botões e não um select: uma escolha que se faz vinte vezes por
+   turno não devia custar dois cliques.
+   ============================================================ */
+.q-views{display:flex;gap:6px;padding:12px 20px 0;flex-wrap:wrap}
+
+.q-view{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
+  padding:8px 13px;border-radius:11px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;
+  transition:border-color .15s ease,color .15s ease,background .15s ease}
+.q-view:hover{color:var(--text);border-color:var(--muted)}
+.q-view.on{background:var(--primary);border-color:transparent;color:#fff}
+
+.q-n{font-family:var(--mono);font-size:11px;font-weight:600;
+  padding:1px 6px;border-radius:999px;background:var(--card-2);
+  color:var(--muted);min-width:20px;text-align:center}
+.q-view.on .q-n{background:rgba(255,255,255,.22);color:#fff}
+
+/* A vista de quem espera fica vermelha quando há alguém à espera.
+   É a única que grita, porque é a única onde esperar custa. */
+.q-view[data-view="waiting"].hot .q-n{background:var(--bad);color:#fff}
+.q-view[data-view="waiting"].on.hot .q-n{background:rgba(255,255,255,.3)}
+
+@media (max-width:700px){
+  .q-views{padding:10px 12px 0}
+  .q-view{padding:7px 11px;font-size:12.5px}
+}
+
+/* ============================================================
+   QUEM ESTÁ NA CONVERSA
+
+   Duas coisas diferentes, mostradas de forma diferente:
+
+     handling   está a atender, responde ele
+     viewing    está a ler, não interrompe
+
+   Antes eram a mesma, e o agente não sabia se podia escrever ou
+   se atrapalhava.
+   ============================================================ */
+.wt-mode{font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;
+  border-radius:999px;margin-left:6px}
+.wt-mode.handling{background:var(--ok-bg);color:var(--ok)}
+.wt-mode.viewing{background:var(--card-2);color:var(--muted)}
+
+/* ============================================================
+   O RELÓGIO DA RESPOSTA
+
+   Conta desde a última mensagem do parceiro. Aos três minutos
+   fica âmbar, aos cinco vermelho — os mesmos limites que o
+   servidor usa para marcar a conversa como atrasada.
+
+   O agente promete três minutos e não tinha como saber se os
+   estava a cumprir.
+   ============================================================ */
+.reply-clock{display:flex;align-items:center;gap:9px;
+  padding:9px 20px;background:var(--card-2);
+  border-top:1px solid var(--border);font-size:13px}
+.reply-clock[hidden]{display:none!important}
+
+.rc-dot{width:8px;height:8px;border-radius:999px;flex:0 0 auto;
+  background:var(--ok)}
+.rc-time{font-family:var(--mono);font-size:14px;font-weight:600;
+  color:var(--text)}
+.rc-label{color:var(--muted);font-size:12.5px}
+
+.reply-clock.warn{background:var(--warn-bg)}
+.reply-clock.warn .rc-dot{background:var(--warn)}
+.reply-clock.warn .rc-time{color:var(--warn)}
+
+.reply-clock.late{background:var(--bad-bg)}
+.reply-clock.late .rc-dot{background:var(--bad);
+  animation:rcPulse 1.4s ease-in-out infinite}
+.reply-clock.late .rc-time{color:var(--bad)}
+@keyframes rcPulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.reply-clock.late .rc-dot{animation:none}}
+
+/* ============================================================
+   O AVISO DE TRABALHO DE FUNDO PARADO
+
+   Se o cron parar, nada avisa: o painel continua a funcionar, por
+   isso ninguém repara — até alguém notar que há três dias que
+   ninguém é avisado de nada.
+   ============================================================ */
+.tick-warn{display:none;align-items:center;gap:9px;padding:10px 20px;
+  background:var(--bad-bg);color:var(--bad);font-size:13px;font-weight:600;
+  border-bottom:1px solid var(--border)}
+.tick-warn.on{display:flex}

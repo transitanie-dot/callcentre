@@ -1355,3 +1355,46 @@
 .duty-in{background:color-mix(in srgb,#16A34A 12%,transparent)}
 .duty-in b{font-weight:600;font-size:14px}
 .duty-in:hover{background:color-mix(in srgb,#16A34A 20%,transparent)}
+
+/* ============================================================
+   O PONTO DA SITUAÇÃO DE UM PARCEIRO
+
+   Os documentos apareciam um a um. Para saber se faltava alguma
+   coisa era preciso lê-los todos — com sete requisitos e vinte
+   candidaturas, ninguém faz isso.
+
+   Esta barra responde à pergunta que se faz primeiro: falta
+   alguma coisa, ou está pronto para decidir?
+   ============================================================ */
+.pt-prog{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 0 4px}
+
+/* Duas barras sobrepostas: o que foi entregue e, por cima, o que
+   já está aprovado. A diferença entre as duas é o que falta rever
+   — e vê-se sem contar nada. */
+.pt-bar{position:relative;flex:1;min-width:120px;height:6px;
+  border-radius:999px;background:var(--card-2);overflow:hidden}
+.pt-bar u{position:absolute;left:0;top:0;bottom:0;border-radius:999px;
+  background:var(--warn);opacity:.45;text-decoration:none;
+  transition:width .3s ease}
+.pt-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;
+  background:var(--ok);z-index:1;transition:width .3s ease}
+
+.pt-prog-n{font-family:var(--mono);font-size:11.5px;font-weight:600;
+  color:var(--muted);flex:0 0 auto}
+.pt-prog.done .pt-prog-n{color:var(--ok)}
+
+.pt-tag{font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;
+  border-radius:999px;flex:0 0 auto}
+.pt-tag.wait{background:var(--warn-bg);color:var(--warn)}
+.pt-tag.miss{background:var(--card-2);color:var(--muted)}
+.pt-tag.bad{background:var(--bad-bg);color:var(--bad)}
+
+/* "Pronto para aprovar" é a única etiqueta que pede uma ação, e
+   por isso é a única que pulsa. Se pulsassem todas, nenhuma
+   chamaria a atenção. */
+.pt-tag.ok{background:var(--ok);color:#fff;
+  animation:ptReady 2.2s ease-in-out infinite}
+@keyframes ptReady{0%,100%{opacity:1}50%{opacity:.6}}
+@media (prefers-reduced-motion:reduce){.pt-tag.ok{animation:none}}

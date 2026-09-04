@@ -1748,8 +1748,22 @@ async function pegarConversa(chatId) {
    *
    * O ajustarActive, mais abaixo, arruma quem estava em live.
    */
+  /**
+   * Pegar um chat estando offline é entrar ao serviço.
+   *
+   * Vai direto a Active, sem passar por Live: Live é o estado de
+   * quem está pronto e sem tickets, e quem acabou de pegar um tem
+   * um. Passar por lá seria um instante a mostrar uma coisa que
+   * não é verdade.
+   *
+   * O servidor faz o mesmo no claim_chat — isto é só para o ecrã
+   * não esperar pela resposta.
+   */
   if (desk.state === 'offline' || desk.state === 'unknown') {
-    await setDeskState('active', true);
+    desk.state = 'active';
+    estadoDesde = Date.now();
+    document.body.setAttribute('data-duty', 'active');
+    pintarDuty();
   }
 
   try {
@@ -1777,12 +1791,14 @@ async function pegarConversa(chatId) {
 }
 
 /**
- * O active entra e sai sozinho.
+ * O Live e o Active mudam sozinhos, no Postgres.
  *
- * Com chats abertos é active; sem eles volta a live. Só se aplica
- * a quem estava num desses dois — quem se pôs em training ou em
- * escalating disse que está ocupado, e pegar um chat não desfaz
- * essa decisão.
+ * Um gatilho na partner_chats e na support_chats chama o
+ * sync_agent_state sempre que uma conversa muda de dono ou fecha.
+ * Fazê-lo aqui obrigaria a lembrar em seis sítios diferentes, e
+ * bastava esquecer um.
+ *
+ * Esta função só ACERTA O ECRÃ com o que o servidor já decidiu.
  */
 function ajustarActive() {
   if (desk.state !== 'live' && desk.state !== 'active') return;
@@ -1793,7 +1809,14 @@ function ajustarActive() {
 
   var devia = meus > 0 ? 'active' : 'live';
 
-  if (desk.state !== devia) setDeskState(devia, true);
+  if (desk.state === devia) return;
+
+  // Só o ecrã. A gravação já aconteceu no servidor.
+  desk.state = devia;
+  estadoDesde = Date.now();
+  document.body.setAttribute('data-duty', devia);
+  el('dutyNote').textContent = STATE_NOTES[devia] || '';
+  pintarDuty();
 }
 
 /**
@@ -2528,24 +2551,17 @@ async function iniciarApoio() {
    * Aqui pinta-se primeiro com a resposta que já chegou, e a
    * gravação vai a caminho sem ninguém à espera dela.
    */
-  if (meu && meu.state && meu.state !== 'offline') {
-    var desde = meu.state_since ? Date.parse(meu.state_since) : null;
+  /**
+   * O estado, retomado sem o gravar.
+   *
+   * Havia aqui duas coisas a fazer o mesmo: este bloco pintava, e o
+   * aplicarEstado gravava por baixo. A gravação abria um período
+   * novo no servidor, e o tempo voltava a zero a cada refresh.
+   *
+   * Retomar não é mudar. Agora só se pinta.
+   */
+  aplicarEstado(meu);
 
-    desk.state = meu.state;
-    if (desde && !isNaN(desde)) estadoDesde = desde;
-
-    document.body.setAttribute('data-duty', meu.state);
-    el('dutyNote').textContent = STATE_NOTES[meu.state] || '';
-    pintarDuty();
-    pintarDia();
-  } else {
-    desk.state = 'offline';
-    document.body.setAttribute('data-duty', 'offline');
-    pintarDuty();
-  }
-
-  // A gravação e o resto correm sem bloquear o desenho.
-  aplicarEstado(meu).catch(function () {});
   atalhos.catch(function () {});
   cargo.catch(function () {});
 }
@@ -2602,39 +2618,41 @@ setTimeout(function () {
   pintarDuty();
 }, 8000);
 
-async function aplicarEstado(meu) {
-  // Sem linha, ou offline: assume-se offline. É o estado seguro —
-  // melhor não receber chamadas do que julgar que se está a
-  // receber e não estar.
-  if (!meu || !meu.state || meu.state === 'offline') {
-    await setDeskState('offline', true);
+/**
+ * Retomar o estado depois de um refresh.
+ *
+ * NÃO chama o setDeskState. Isso mandava uma mudança ao servidor, e
+ * o set_agent_state fechava o período em curso e abria um novo — o
+ * tempo voltava a zero a cada atualização da página.
+ *
+ * Retomar não é mudar. O estado já é esse; só o ecrã é que não
+ * sabia.
+ */
+function aplicarEstado(meu) {
+  if (!meu || !meu.state) {
+    desk.state = 'offline';
+    estadoDesde = Date.now();
+    document.body.setAttribute('data-duty', 'offline');
+    pintarDuty();
     return;
   }
 
-  // A presença pode ter expirado enquanto a página esteve fechada.
-  // Nesse caso não se retoma nada: estar ao serviço tem de ser uma
-  // decisão de agora, não a herança de uma sessão de ontem.
-  /**
-   * O relógio continua de onde estava.
-   *
-   * O estadoDesde arrancava em Date.now(), por isso um
-   * recarregamento fazia a contagem recomeçar do zero — e o tempo
-   * do dia parecia perder-se de cada vez que se atualizava a
-   * página.
-   *
-   * O servidor sabe quando o período começou: está no
-   * agent_state_log e vem na vista support_team.
-   */
-  var desde = null;
-  if (meu.state_since) {
-    var inicio = Date.parse(meu.state_since);
-    if (inicio && !isNaN(inicio)) desde = inicio;
-  }
+  desk.state = meu.state;
 
-  var visto = meu.last_seen_at ? Date.parse(meu.last_seen_at) : 0;
-  if (!visto || Date.now() - visto > 5 * 60000) return;
+  // O período começou quando o servidor diz que começou.
+  var desde = meu.state_since ? Date.parse(meu.state_since) : null;
+  estadoDesde = (desde && !isNaN(desde)) ? desde : Date.now();
 
-  await setDeskState(meu.state, true, desde);
+  document.body.setAttribute('data-duty', meu.state);
+  el('dutyNote').textContent = STATE_NOTES[meu.state] || '';
+
+  pintarDuty();
+  pintarDia();
+
+  // O som fica pronto se o estado recebe conversas. Sem gesto do
+  // utilizador o browser recusa, mas o desbloqueio fica agendado
+  // para o primeiro clique.
+  if (meu.state === 'live' || meu.state === 'active') unlockAudio();
 }
 
 async function loadDisplayName() {
@@ -2945,10 +2963,23 @@ el('chatUrgentBtn').addEventListener('click', async function () {
  * um chat e sai quando se larga o último.
  */
 var STATES = [
-  { key: 'live', label: 'Live', color: '#16A34A', takes: true,
-    note: 'Ready for chats. New ones can be assigned to you.' },
+  /**
+   * O Live e o Active NÃO se escolhem.
+   *
+   * São consequências: com ticket é Active, sem ticket é Live. Um
+   * gatilho no Postgres trata disso sempre que uma conversa muda
+   * de mãos.
+   *
+   * Aparecem no menu para se ver onde se está, mas não se clicam —
+   * clicar em Live com três tickets abertos seria uma afirmação
+   * falsa que o servidor recusaria na mesma.
+   *
+   * Para SAIR de serviço há os outros: break, lunch, offline.
+   */
+  { key: 'live', label: 'Live', color: '#16A34A', takes: true, auto: true,
+    note: 'Ready, with nothing open. You land here when you close your last ticket.' },
   { key: 'active', label: 'Active', color: '#2563EB', takes: true, auto: true,
-    note: 'You have chats open. This changes on its own as you take and close them.',
+    note: 'You have tickets open. Close them and you go back to Live on your own.',
     // Quantos chats abertos, no rótulo. Um agente que veja 2/3 sabe
     // que ainda pode receber um; a 3/3 sabe porque parou de tocar.
     contagem: true },
@@ -2969,7 +3000,7 @@ var STATES = [
   { key: 'lunch', label: 'Lunch', color: '#CA8A04', takes: false,
     note: 'Longer break. Counts separately from short breaks, which is what ' +
       'makes the day report useful for planning shifts.' },
-  { key: 'offline', label: 'Offline', color: '#DC2626', takes: false,
+  { key: 'offline', label: 'Offline', color: '#DC2626', takes: false, sair: true,
     // Sem nota: o estado diz-se sozinho. Mas há uma regra que
     // convém saber antes de tentar.
     note: 'You cannot go offline while you still have chats open.' }
@@ -3072,7 +3103,20 @@ function pintarDuty() {
     escapeHtml(souSupervisor ? 'Supervisor' : 'Agent') + '</span>' +
     '</div>';
 
-  el('dutyMenu').innerHTML = cabeca + STATES.map(function (st) {
+  /**
+   * Entrar ao serviço, quando se está fora.
+   *
+   * O Live é automático e não se clica — mas quem está offline
+   * precisa de uma porta de entrada. Este botão é essa porta, e só
+   * aparece quando faz falta.
+   */
+  var entrar = (desk.state === 'offline' || desk.state === 'unknown')
+    ? '<button class="duty-opt duty-in" data-duty-opt="live" type="button">' +
+      '<span class="dot" style="background:#16A34A"></span>' +
+      '<b>Go on duty</b></button><div class="duty-sep"></div>'
+    : '';
+
+  el('dutyMenu').innerHTML = cabeca + entrar + STATES.map(function (st) {
     // O active aparece mas não se clica: entra e sai sozinho.
     var nome = st.label;
 

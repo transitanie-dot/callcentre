@@ -683,6 +683,11 @@
           </button>
 
           <div class="hidden" id="chatOpen" style="display:flex;flex-direction:column;height:100%">
+            <!-- Os outros agentes que estão a ver. Sem isto, dois
+                 escrevem ao mesmo tempo sem saber um do outro, e o
+                 parceiro recebe duas respostas à mesma pergunta. -->
+            <div class="watchers" id="chatWatchers" hidden></div>
+
             <div class="desk-head">
               <div>
                 <strong id="chatWho">&mdash;</strong>
@@ -711,7 +716,10 @@
 
             <div class="desk-claim hidden" id="chatClaimBar">
               <span id="chatClaimText">Reading only. Take it to reply.</span>
-              <button class="claim-btn" id="chatTakeBtn" type="button">Take this chat</button>
+              <!-- Entrar não tira nada a ninguém: os dois ficam e ambos podem
+                 escrever. Tomar conta é que passa a conversa. -->
+            <button class="claim-btn line hidden" id="chatJoinBtn" type="button">Join</button>
+            <button class="claim-btn" id="chatTakeBtn" type="button">Take this chat</button>
             </div>
 
             <div class="desk-split">

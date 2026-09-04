@@ -22,7 +22,12 @@
      mostravam-se sem estado nenhum. -->
 <body data-duty="unknown">
 
-  <div id="gateView" class="gate">
+  <!-- Escondido de origem.
+       Sem o hidden, o formulário de entrada aparece durante o
+       instante entre o HTML chegar e o JavaScript correr — e quem
+       já tem sessão vê a página de login a piscar a cada refresh.
+       O bootView, logo abaixo, é o que se mostra primeiro. -->
+  <div id="gateView" class="gate hidden">
     <div class="gate-card">
       <h1>Admin access</h1>
       <p>Sign in with an administrator account to continue.</p>
@@ -37,7 +42,7 @@
        "Checking your session" é o que o programa está a fazer, não
        o que a pessoa quer saber. A marca a esbater diz que está a
        carregar sem explicar mecânica nenhuma. -->
-  <div id="bootView" class="boot-wait hidden">
+  <div id="bootView" class="boot-wait">
     <div class="boot-mark">AIRPORT<span>LINK</span></div>
   </div>
 

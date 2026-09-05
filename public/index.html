@@ -258,7 +258,7 @@
 
     <div id="bookingsTab" class="panel">
       <div class="quick-views" id="quickViews">
-        <button class="qv" data-view="today-travel" type="button">
+        <button class="qv active" data-view="today-travel" type="button">
           <span class="qv-n" id="qvTravel">0</span>
           <span class="qv-l">Travelling today</span>
         </button>
@@ -278,7 +278,7 @@
           <span class="qv-n" id="qvRefunds">0</span>
           <span class="qv-l">Refunds to handle</span>
         </button>
-        <button class="qv active" data-view="all" type="button">
+        <button class="qv" data-view="all" type="button">
           <span class="qv-n" id="qvAll">0</span>
           <span class="qv-l">Everything</span>
         </button>
@@ -646,16 +646,16 @@
            encontrava. São a coisa mais usada do painel: quem está
            à espera, quem já tem alguém, e o que é meu. -->
       <div class="q-views" id="qViews">
-        <button class="q-view on" data-view="waiting" type="button">
+        <button class="q-view on" data-qview="waiting" type="button">
           Waiting <span class="q-n" id="qnWaiting">0</span>
         </button>
-        <button class="q-view" data-view="taken" type="button">
+        <button class="q-view" data-qview="taken" type="button">
           With an agent <span class="q-n" id="qnTaken">0</span>
         </button>
-        <button class="q-view" data-view="mine" type="button">
+        <button class="q-view" data-qview="mine" type="button">
           Mine <span class="q-n" id="qnMine">0</span>
         </button>
-        <button class="q-view" data-view="closed" type="button">Closed</button>
+        <button class="q-view" data-qview="closed" type="button">Closed</button>
       </div>
 
       <div class="desk-search">

@@ -1498,3 +1498,8 @@
 .row-sub{display:block;font-family:var(--mono);font-size:11px;font-weight:400;
   color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
+
+/* O aviso de disputas. Âmbar e não vermelho: é urgente mas tem
+   prazo, ao contrário do trabalho de fundo parado, que já está a
+   falhar agora. */
+.tick-warn.dispute{background:var(--warn-bg);color:var(--warn)}

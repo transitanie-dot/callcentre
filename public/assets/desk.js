@@ -3564,6 +3564,42 @@ function hojeLocal() {
  * funcionar, por isso ninguém repara até alguém notar que há três
  * dias que ninguém é avisado de nada.
  */
+/**
+ * As disputas abertas, no topo do painel.
+ *
+ * Uma disputa perdida por omissão custa a viagem mais a taxa. O
+ * prazo é curto e passa depressa — e nada avisava.
+ */
+async function verificarDisputas() {
+  if (!souSupervisor) return;
+
+  var aviso = el('disputeWarn');
+  if (!aviso || aviso.__missing) return;
+
+  try {
+    var r = await deskFetch('/api/admin/disputes');
+    var lista = r.disputes || [];
+
+    if (!lista.length) { aviso.classList.remove('on'); return; }
+
+    // A mais urgente decide o texto: se uma expira amanhã, é dela
+    // que se fala.
+    var urgente = lista[0];
+    var dias = urgente.days_left;
+
+    aviso.classList.add('on');
+    aviso.textContent = lista.length +
+      (lista.length === 1 ? ' open dispute' : ' open disputes') +
+      (dias != null
+        ? (dias <= 0
+            ? ' — one is past its deadline'
+            : ' — respond within ' + dias + ' day' + (dias === 1 ? '' : 's'))
+        : '');
+  } catch (e) {
+    // Não é supervisor, ou a rede falhou. Nada a fazer.
+  }
+}
+
 async function verificarTrabalhoDeFundo() {
   var aviso = el('tickWarn');
   if (!aviso || aviso.__missing) return;
@@ -3891,6 +3927,7 @@ async function setDeskState(state, aRetomar, desdeQuando) {
       carregarDia();
       sincronizarEstado();
       verificarTrabalhoDeFundo();
+      verificarDisputas();
     }, 120000);
   }
 

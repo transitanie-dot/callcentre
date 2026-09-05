@@ -1366,6 +1366,11 @@ async function loadDesk() {
       : desk.todas;
 
     desk.capacity = cap || {};
+
+    // Os números das outras filas. Sem esperar: as abas atualizam
+    // quando chegarem.
+    carregarContagens();
+
     pintarMarcas();
     pintarAudTabs();
     renderDesk();
@@ -2444,6 +2449,24 @@ function marcaDe(c) {
 // ============================================================
 var escaladas = [];
 
+/**
+ * Quantos estão à espera em cada fila.
+ *
+ * Vem do servidor com cada carregamento. O browser não tem como
+ * saber quantos estão na fila que não está a ver.
+ */
+var contagens = null;
+
+async function carregarContagens() {
+  try {
+    contagens = await deskFetch('/api/admin/queue-counts');
+    pintarAudTabs();
+  } catch (e) {
+    // Falhar aqui não apaga os números anteriores: melhor um pouco
+    // desatualizados do que a zero.
+  }
+}
+
 /** O nome de quem escalou, tirado da nota. */
 function quemEscalou(nota) {
   var m = /^Escalated by ([^:]+):/.exec(String(nota || ''));
@@ -2611,26 +2634,22 @@ function pintarAudTabs() {
 
   if (!emChat) return;
 
-  var todas = desk.todas || desk.chats || [];
-
-  var esperam = todas.filter(function (c) {
-    return !c.assigned_to && c.unread_for_admin > 0;
-  }).length;
-
-  var emCurso = todas.filter(function (c) {
-    return c.assigned_to && c.status === 'open';
-  }).length;
-
-  // Hoje só os motoristas têm fila própria. Os clientes vivem noutro
-  // separador e as agências ainda não têm chat — daí os contadores
-  // deles ficarem a zero.
-  var estado = {
-    drivers: { espera: esperam, curso: emCurso },
-    customers: { espera: alerts.supportTab || 0, curso: 0 },
+  /**
+   * Os números das TRÊS filas, vindos do servidor.
+   *
+   * Contavam-se aqui, a partir da fila aberta — e o resultado era
+   * atribuído sempre aos motoristas. As outras duas abas mostravam
+   * zero mesmo com onze clientes à espera, e isso faz o painel
+   * parecer avariado quando está certo.
+   *
+   * O browser não tem como saber quantos estão na fila que não
+   * está a ver. Só o servidor tem.
+   */
+  var estado = contagens || {
+    drivers: { espera: 0, curso: 0 },
+    customers: { espera: 0, curso: 0 },
     agents: { espera: 0, curso: 0 },
-    // Uma escalada à espera é o caso mais urgente que existe: já
-    // passou por um agente que não conseguiu resolver.
-    escalated: { espera: escaladas.length, curso: 0 }
+    escalated: { espera: 0, curso: 0 }
   };
 
   // A aba de escaladas só existe para supervisores.
@@ -2731,6 +2750,11 @@ async function iniciarApoio() {
   deskDisplayName = ses.display_name || null;
   meuAvatar = ses.avatar_path || null;
   souSupervisor = Boolean(ses.is_supervisor);
+
+  // O cargo escrito no <body>. Era usado no aplicarCargo e nunca
+  // era definido — ficava undefined, e o painel mostrava "agent"
+  // a um supervisor.
+  meuCargo = ses.role || 'agent';
 
   paintDisplayName();
   aplicarCargo();
@@ -3496,6 +3520,7 @@ function marcarEstadoDesde(segundos) {
 /** Quem sou eu, e com que cargo. */
 var meuCargo = 'agent';
 var souSupervisor = false;
+var meuCargo = 'agent';
 
 function duracao(seg) {
   var s = Math.max(0, Math.round(seg));

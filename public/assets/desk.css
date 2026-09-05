@@ -1491,3 +1491,10 @@
   background:var(--bad-bg);color:var(--bad);font-size:13px;font-weight:600;
   border-bottom:1px solid var(--border)}
 .tick-warn.on{display:flex}
+
+/* O email por baixo do nome, no cartão da conversa. Dois clientes
+   com o mesmo primeiro nome são indistinguíveis sem ele — e o
+   agente abre a conversa errada. */
+.row-sub{display:block;font-family:var(--mono);font-size:11px;font-weight:400;
+  color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}

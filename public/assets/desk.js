@@ -1513,6 +1513,11 @@ function renderDesk() {
     return;
   }
 
+  // Os contadores das três vistas. Nunca eram pintados — ficavam a
+  // zero com conversas na fila, e isso faz a lista parecer avariada
+  // mesmo quando está certa.
+  pintarVistas(desk.chats);
+
   var visiveis = filtrarConversas(desk.chats);
 
   var minhas = visiveis.filter(function (c) {
@@ -1550,6 +1555,11 @@ function renderDesk() {
       '<div class="top"><span class="nm">' +
       escapeHtml(quemE(c)) + '</span>' +
       '<span class="ago">' + escapeHtml(agoLabel(c.minutes_since)) + '</span></div>' +
+      // O email por baixo do nome. Dois clientes com o mesmo
+      // primeiro nome são indistinguíveis sem ele, e o agente abre
+      // a conversa errada.
+      (c.email && c.email !== quemE(c)
+        ? '<div class="row-sub">' + escapeHtml(c.email) + '</div>' : '') +
       '<div class="snip">' + escapeHtml(c.last_message_text || 'No messages yet') + '</div>' +
       (tags.length ? '<div class="tags">' + tags.join('') + '</div>' : '') +
       '</button>';

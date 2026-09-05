@@ -3030,21 +3030,23 @@ el('closeGo').addEventListener('click', async function () {
   if (!desk.current) return;
 
   /**
-   * "Resolvido" exige dizer COMO.
+   * O resumo é opcional, mas pergunta-se uma vez.
    *
-   * Um resolved sem resumo não serve de nada a quem abrir a
-   * conversa daqui a um mês — nem ao agente que apanhar o mesmo
-   * parceiro na semana seguinte.
+   * Obrigá-lo travava o fecho e irritava quem tem três conversas à
+   * espera. Não perguntar nada faz com que ninguém escreva.
    *
-   * Os outros motivos não precisam: "não respondeu" já se explica.
+   * Uma pergunta que se responde com Enter é o meio-termo: quem
+   * quer escrever, escreve; quem não quer, fecha na mesma.
    */
   var nota = el('closeNote').value.trim();
 
-  if (fecho.motivo === 'resolved' && nota.length < 20) {
-    el('closeNote').focus();
-    return avisar('Say how it was resolved',
-      'A sentence is enough. The next agent to get this partner will read ' +
-      'it, and so will you in a month when you no longer remember.');
+  if (fecho.motivo === 'resolved' && !nota) {
+    if (!await perguntar('Close without a note?',
+        'The next agent to get this partner will not know how it was ' +
+        'resolved — and neither will you in a month.')) {
+      el('closeNote').focus();
+      return;
+    }
   }
 
   el('closeBack').hidden = true;

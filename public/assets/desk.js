@@ -3153,22 +3153,16 @@ el('chatUrgentBtn').addEventListener('click', async function () {
  */
 var STATES = [
   /**
-   * O Live e o Active NÃO se escolhem.
+   * Online é a porta de entrada ao serviço, e clica-se.
    *
-   * São consequências: com ticket é Active, sem ticket é Live. Um
-   * gatilho no Postgres trata disso sempre que uma conversa muda
-   * de mãos.
-   *
-   * Aparecem no menu para se ver onde se está, mas não se clicam —
-   * clicar em Live com três tickets abertos seria uma afirmação
-   * falsa que o servidor recusaria na mesma.
-   *
-   * Para SAIR de serviço há os outros: break, lunch, offline.
+   * O Active é que não: entra e sai sozinho conforme os tickets
+   * abertos. Mas quem está offline precisa de uma forma de voltar,
+   * e é este.
    */
-  { key: 'live', label: 'Live', color: '#16A34A', takes: true, auto: true,
-    note: 'Ready, with nothing open. You land here when you close your last ticket.' },
+  { key: 'live', label: 'Online', color: '#16A34A', takes: true,
+    note: 'Ready for chats. New ones can be assigned to you.' },
   { key: 'active', label: 'Active', color: '#2563EB', takes: true, auto: true,
-    note: 'You have tickets open. Close them and you go back to Live on your own.',
+    note: 'You have tickets open. Close them and you go back to Online on your own.',
     // Quantos chats abertos, no rótulo. Um agente que veja 2/3 sabe
     // que ainda pode receber um; a 3/3 sabe porque parou de tocar.
     contagem: true },
@@ -3292,20 +3286,7 @@ function pintarDuty() {
     escapeHtml(souSupervisor ? 'Supervisor' : 'Agent') + '</span>' +
     '</div>';
 
-  /**
-   * Entrar ao serviço, quando se está fora.
-   *
-   * O Live é automático e não se clica — mas quem está offline
-   * precisa de uma porta de entrada. Este botão é essa porta, e só
-   * aparece quando faz falta.
-   */
-  var entrar = (desk.state === 'offline' || desk.state === 'unknown')
-    ? '<button class="duty-opt duty-in" data-duty-opt="live" type="button">' +
-      '<span class="dot" style="background:#16A34A"></span>' +
-      '<b>Go on duty</b></button><div class="duty-sep"></div>'
-    : '';
-
-  el('dutyMenu').innerHTML = cabeca + entrar + STATES.map(function (st) {
+  el('dutyMenu').innerHTML = cabeca + STATES.map(function (st) {
     // O active aparece mas não se clica: entra e sai sozinho.
     var nome = st.label;
 

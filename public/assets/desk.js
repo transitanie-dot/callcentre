@@ -6221,6 +6221,128 @@ function docLabel(p, code) {
   return r ? r.label : code;
 }
 
+// ============================================================
+// O MAPA DE COBERTURA
+//
+// A peça que ninguém pede e que mais vale.
+//
+// Uma zona onde ninguém se registou vende na mesma. A viagem fica
+// parada e ninguém a recusa — porque ninguém a vê. Isto diz onde
+// estamos a vender sem servir, antes de o cliente escrever.
+// ============================================================
+
+/** O que cada estado quer dizer, em palavras. */
+var COV_LABEL = {
+  selling_blind: 'no partner',
+  no_vans: 'no vans',
+  sedans_only: 'sedans only',
+  thin: 'thin',
+  empty: 'empty',
+  quiet: 'quiet',
+  ok: 'ok'
+};
+
+async function carregarCobertura() {
+  var lista = el('covList');
+  if (!lista || lista.__missing) return;
+
+  try {
+    var r = await deskFetch('/api/admin/coverage');
+    pintarCobertura(r.zones || [], r.summary || {});
+  } catch (e) {
+    lista.innerHTML = '<div class="error-row">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function pintarCobertura(zonas, resumo) {
+  var topo = el('covSummary');
+
+  /**
+   * Só o que pede ação ganha cor.
+   *
+   * Se todos os números gritassem, nenhum chamaria a atenção. As
+   * zonas tranquilas contam-se juntas: não há nada a fazer com
+   * elas.
+   */
+  var problemas = zonas.filter(function (z) {
+    return z.state === 'selling_blind' || z.state === 'no_vans' ||
+           z.state === 'sedans_only' || z.state === 'thin';
+  });
+
+  topo.innerHTML =
+    '<span class="cov-pill' + (resumo.selling_blind ? ' bad' : '') + '">' +
+      '<b>' + (resumo.selling_blind || 0) + '</b>' +
+      '<span>selling with no partner</span></span>' +
+
+    '<span class="cov-pill' +
+      (zonas.filter(function (z) { return z.state === 'no_vans'; }).length ? ' bad' : '') +
+      '"><b>' +
+      zonas.filter(function (z) { return z.state === 'no_vans'; }).length +
+      '</b><span>sold groups, no vans</span></span>' +
+
+    '<span class="cov-pill' + (resumo.thin ? ' warn' : '') + '">' +
+      '<b>' + (resumo.thin || 0) + '</b>' +
+      '<span>one partner only</span></span>' +
+
+    '<span class="cov-pill"><b>' + (resumo.ok || 0) + '</b>' +
+      '<span>covered</span></span>';
+
+  var lista = el('covList');
+
+  if (!problemas.length) {
+    lista.innerHTML = '<div class="no-results">' +
+      'Every zone that sells has somebody to serve it.' +
+      (zonas.length
+        ? '<br><span style="color:var(--muted);font-size:13px">' +
+          zonas.length + ' zones checked.</span>'
+        : '') +
+      '</div>';
+    return;
+  }
+
+  el('covSub').textContent = problemas.length +
+    (problemas.length === 1 ? ' zone needs' : ' zones need') +
+    ' attention. The rest are fine.';
+
+  lista.innerHTML =
+    '<div class="cov-row cov-head">' +
+      '<span>Zone</span><span>Partners</span><span>Vans</span>' +
+      '<span>Covers</span><span>State</span>' +
+    '</div>' +
+
+    problemas.map(function (z) {
+      return '<div class="cov-row">' +
+        '<span class="cov-name"><b>' + escapeHtml(z.zone_name || z.zone_code) + '</b>' +
+          '<small>' + escapeHtml(z.country || '') +
+          (z.bookings_30d
+            ? ' &middot; ' + z.bookings_30d + ' booking' +
+              (z.bookings_30d === 1 ? '' : 's') + ' in 30 days'
+            : '') +
+          (z.big_groups_30d
+            ? ' &middot; ' + z.big_groups_30d + ' over 8 pax'
+            : '') +
+          '</small></span>' +
+
+        '<span class="cov-n' + (z.partners ? '' : ' zero') + '">' +
+          z.partners + '</span>' +
+
+        '<span class="cov-n' + (z.vans_in_zone ? '' : ' zero') + '">' +
+          z.vans_in_zone + '</span>' +
+
+        '<span class="cov-classes">' +
+          ((z.classes_covered || []).length
+            ? z.classes_covered.map(function (c) {
+                return '<span class="cov-cls">' + escapeHtml(c) + '</span>';
+              }).join('')
+            : '<span class="cov-cls">none</span>') +
+        '</span>' +
+
+        '<span class="cov-state ' + escapeHtml(z.state) + '">' +
+          escapeHtml(COV_LABEL[z.state] || z.state) + '</span>' +
+      '</div>';
+    }).join('');
+}
+
 function renderPartners() {
   var box = el('ptList');
   var list = partners.slice();
@@ -7019,6 +7141,10 @@ function switchTab(name) {
   clearAlerts(name);
 
   if (name === 'shiftTab') loadShifts();
+
+  // A cobertura carrega-se ao abrir, não no arranque: são 200
+  // zonas e ninguém olha para elas todos os dias.
+  if (name === 'partnersTab') carregarCobertura();
 
   if (name === 'chatTab') {
     if (chatAlert) { clearInterval(chatAlert); chatAlert = null; }

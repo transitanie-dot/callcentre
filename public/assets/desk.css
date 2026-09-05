@@ -568,7 +568,10 @@
     .desk-figs .v{display:block;font-family:var(--mono);font-size:16px;font-weight:600}
     .desk-list{flex:1;overflow-y:auto;background:var(--card);border:1px solid var(--border);
       border-radius:14px;padding:8px;min-height:0}
-    .chat-row{width:100%;text-align:left;background:transparent;border:1px solid transparent;
+    /* display:block, senão o botão encolhe ao conteúdo e só o texto
+   responde ao clique. A largura de 100% não chega: um <button> é
+   inline por omissão e a altura fica pelo que lá está dentro. */
+.chat-row{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;
       border-radius:11px;padding:12px 13px;cursor:pointer;margin-bottom:5px;color:var(--text)}
     .chat-row:hover{background:var(--card-2)}
     .chat-row.active{background:var(--primary-soft);border-color:var(--primary)}
@@ -1349,12 +1352,6 @@
 @keyframes bootFade{0%,100%{opacity:.35}50%{opacity:.7}}
 @media (prefers-reduced-motion:reduce){.boot-mark{animation:none}}
 
-/* Entrar ao serviço. O Live e o Active são automáticos e não se
-   clicam — mas quem está offline precisa de uma porta, e ela só
-   aparece quando faz falta. */
-.duty-in{background:color-mix(in srgb,#16A34A 12%,transparent)}
-.duty-in b{font-weight:600;font-size:14px}
-.duty-in:hover{background:color-mix(in srgb,#16A34A 20%,transparent)}
 
 /* ============================================================
    O PONTO DA SITUAÇÃO DE UM PARCEIRO

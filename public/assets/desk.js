@@ -6971,12 +6971,21 @@ function switchTab(name) {
     loadDesk();
   }
 
-  // As abas de público aparecem e desaparecem com o separador, e a
-  // que fica ativa acompanha: entrar no separador de clientes marca
-  // a aba de clientes, e vice-versa.
-  if (name === 'supportTab') audAtual = 'customers';
-  else if (name === 'chatTab' && audAtual === 'customers') audAtual = 'drivers';
-
+  /**
+   * A aba de público NÃO se mexe ao mudar de separador.
+   *
+   * Havia aqui duas linhas a forçá-la: entrar no chatTab punha-a em
+   * 'drivers' se estivesse em 'customers'. Foram escritas quando os
+   * clientes viviam noutro separador — hoje as três filas partilham
+   * o mesmo, e a regra passou a fazer o contrário do que queria.
+   *
+   * O efeito era este: clicar em Customers mudava a aba, chamava o
+   * switchTab, e o switchTab punha-a de volta em Drivers. A vista
+   * saltava sozinha e parecia que o clique não tinha funcionado.
+   *
+   * A escolha é do agente, e vem do servidor. Nada aqui a deve
+   * sobrepor.
+   */
   pintarAudTabs();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });

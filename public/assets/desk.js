@@ -135,7 +135,17 @@ var bookingFilters = { bookingId:'', email:'', name:'', pickup:'', dropoff:'',
  *
  * As outras vistas continuam a um clique.
  */
-var quickView = 'all';
+/**
+ * As reservas abrem em "Travelling today".
+ *
+ * Abriam em "all" — centenas de linhas, ordenadas por data, com o
+ * que interessa hoje algures a meio. A pergunta que se faz ao abrir
+ * o separador é "quem viaja hoje", não "quantas reservas existem".
+ *
+ * O "Booked today" fica ao lado, que é a outra pergunta: o que
+ * entrou desde manhã.
+ */
+var quickView = 'today-travel';
 var allBookings = [], bookingPage = 1, bookingPerPage = 50;
 var contacts = [], contactFilters = { search:'', searchId:'' }, contactPage = 1, contactPerPage = 50;
 var selectedContactBookings = [], selectedContactChats = [];
@@ -1306,6 +1316,14 @@ function rotaDaAba(acao) {
   if (acao === 'close') {
     return apoio ? '/api/admin/support/close' : '/api/admin/chat/close';
   }
+  // As mensagens vivem em tabelas diferentes, com nomes de coluna
+  // diferentes. A rota de apoio traduz-as antes de as devolver.
+  if (acao === 'messages') {
+    return apoio ? '/api/admin/support-chat/' : '/api/admin/chat/';
+  }
+  if (acao === 'send') {
+    return apoio ? '/api/admin/support/send' : '/api/admin/chat/send';
+  }
   return '/api/admin/chat/release';
 }
 
@@ -1623,7 +1641,7 @@ async function openDeskChat(chatId) {
   desk.current = chatId;
 
   try {
-    var data = await deskFetch('/api/admin/chat/' + encodeURIComponent(chatId));
+    var data = await deskFetch(rotaDaAba('messages') + encodeURIComponent(chatId));
     desk.messages = data.messages || [];
   } catch (e) {
     avisar('Heads up', e.message);
@@ -2245,7 +2263,7 @@ el('deskFile').addEventListener('change', async function () {
 
     if (up.error) throw new Error(up.error.message);
 
-    var res = await deskFetch('/api/admin/chat/send', {
+    var res = await deskFetch(rotaDaAba('send'), {
       chat_id: desk.current,
       body: el('chatReply').value.trim() || file.name,
       attachment_path: path,
@@ -2277,7 +2295,7 @@ el('chatSendBtn').addEventListener('click', async function () {
   el('chatSendBtn').disabled = true;
 
   try {
-    var res = await deskFetch('/api/admin/chat/send', {
+    var res = await deskFetch(rotaDaAba('send'), {
       chat_id: desk.current,
       body: body,
       internal: deskMode === 'note',
@@ -2478,11 +2496,11 @@ var audAtual = 'drivers';
 // ============================================================
 var vistaAtual = 'waiting';
 
-qsa('[data-view]').forEach(function (b) {
+qsa('[data-qview]').forEach(function (b) {
   b.addEventListener('click', function () {
-    vistaAtual = b.getAttribute('data-view');
+    vistaAtual = b.getAttribute('data-qview');
 
-    qsa('[data-view]').forEach(function (x) {
+    qsa('[data-qview]').forEach(function (x) {
       x.classList.toggle('on', x === b);
     });
 
@@ -2516,7 +2534,7 @@ function pintarVistas(lista) {
   // A vista de quem espera fica vermelha quando há alguém à
   // espera. É a única que grita, porque é a única onde esperar
   // custa.
-  var wb = document.querySelector('[data-view="waiting"]');
+  var wb = document.querySelector('[data-qview="waiting"]');
   if (wb) wb.classList.toggle('hot', n.waiting > 0);
 }
 

@@ -1568,3 +1568,24 @@
   .cov-n, .cov-classes{display:none}
   .cov-head{display:none}
 }
+
+/* ============================================================
+   O CÓDIGO DE RECOLHA
+
+   Quatro dígitos que o passageiro recebe e o motorista pede. Um
+   agente ao telefone com quem perdeu o email precisa de o ler em
+   voz alta — daí o tamanho e o espaçamento.
+
+   Verde quando já foi usado: numa disputa, isso é o cliente a
+   testemunhar que a viagem aconteceu.
+   ============================================================ */
+.code-val{display:inline-block;font-family:var(--mono);font-size:19px;
+  font-weight:600;letter-spacing:.2em;padding:4px 12px;border-radius:9px;
+  background:var(--card-2);color:var(--text)}
+.code-val.used{background:var(--ok-bg);color:var(--ok)}
+
+.step-row{display:flex;align-items:baseline;justify-content:space-between;
+  gap:14px;padding:6px 0;font-size:13.5px}
+.step-row + .step-row{border-top:1px solid var(--border-soft)}
+.step-when{font-family:var(--mono);font-size:12px;color:var(--muted);
+  white-space:nowrap}

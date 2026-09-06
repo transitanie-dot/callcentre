@@ -157,7 +157,7 @@ var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
 var adminChatsChannel = null, adminMessagesChannel = null, adminSelectedFile = null;
 
-var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count'
+var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at'
 var activeBooking = null;
 
 // ============================================================
@@ -666,6 +666,50 @@ function openDetails(id) {
     ? [b.passenger_name || b.full_name, b.passenger_phone || b.phone_number, b.passenger_email]
         .filter(Boolean).join(' \u00b7 ')
     : 'Same as customer';
+  /**
+   * O código de recolha, e o que aconteceu com ele.
+   *
+   * Um agente ao telefone com um cliente que perdeu o email precisa
+   * de o poder dizer. E num pedido de reembolso, saber que o código
+   * foi confirmado é a resposta — o cliente esteve no carro.
+   */
+  var codigo = el('detailPickupCode');
+
+  if (codigo && !codigo.__missing) {
+    codigo.textContent = b.pickup_code || '—';
+    codigo.className = 'code-val' + (b.code_verified_at ? ' used' : '');
+  }
+
+  var etapas = el('detailTripSteps');
+
+  if (etapas && !etapas.__missing) {
+    var passos = [];
+
+    if (b.driver_arrived_at) {
+      passos.push(['Driver arrived', b.driver_arrived_at]);
+    }
+
+    if (b.code_verified_at) {
+      // O que interessa numa disputa: o passageiro deu o código, e
+      // isso é ele a testemunhar que a viagem aconteceu.
+      passos.push(['Code confirmed by passenger', b.code_verified_at]);
+    }
+
+    if (b.trip_ended_at) {
+      passos.push(['Trip finished', b.trip_ended_at]);
+    }
+
+    etapas.innerHTML = passos.length
+      ? passos.map(function (p) {
+          return '<div class="step-row"><span>' + escapeHtml(p[0]) + '</span>' +
+            '<span class="step-when">' +
+            escapeHtml(new Date(p[1]).toLocaleString('en-GB', {
+              day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+            })) + '</span></div>';
+        }).join('')
+      : '<span class="muted">Nothing yet.</span>';
+  }
+
   el('detailPaymentStatus').textContent = b.payment_status || 'N/A';
   el('detailRefunded').textContent = Number(b.refunded_amount || 0) > 0
     ? (money(b.currency, b.refunded_amount) +

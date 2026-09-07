@@ -1334,18 +1334,26 @@ function agoLabel(minutes) {
  * A conversa em si sabe o que é — tem audience quando vem da
  * support_chats, e partner_id quando vem da outra.
  */
+/**
+ * De que tabela veio esta conversa.
+ *
+ * A fila unificada traz o campo source em cada linha — é ela que
+ * sabe, e adivinhar pela aba deixou de fazer sentido quando as
+ * abas passaram a ser uma.
+ */
 function fonteDoChat(chatId) {
   var c = (desk.chats || []).find(function (x) { return x.chat_id === chatId; });
 
-  if (!c) {
-    // Sem a conversa carregada, a aba é o melhor palpite.
-    return (audAtual === 'customers' || audAtual === 'agents') ? 'support' : 'partner';
-  }
+  if (c && c.source) return c.source;
 
-  if (c.partner_id) return 'partner';
-  if (c.audience) return 'support';
+  // Sem a linha, os campos dizem: partner_id só existe numa,
+  // audience só na outra.
+  if (c && c.partner_id) return 'partner';
+  if (c && c.audience) return 'support';
 
-  return (audAtual === 'customers' || audAtual === 'agents') ? 'support' : 'partner';
+  // Sem nada, o partner é o palpite seguro: a rota dele existe há
+  // mais tempo e trata do caso antigo.
+  return 'partner';
 }
 
 async function renderChatCtx(chatId) {
@@ -1649,34 +1657,46 @@ async function deskFetch(path, body) {
  * Devolver o caminho certo aqui evita um "if" espalhado por cada
  * sítio que pega, fecha ou larga uma conversa.
  */
-function rotaDaAba(acao) {
-  var apoio = audAtual === 'customers' || audAtual === 'agents';
+/**
+ * As rotas das ações.
+ *
+ * O claim e o close passaram a ser únicos — o servidor descobre em
+ * que tabela está a conversa. As mensagens continuam separadas
+ * porque vivem em tabelas com colunas de nomes diferentes, e a
+ * rota traduz-as.
+ */
+function rotaDaAba(acao, fonte) {
+  if (acao === 'claim') return '/api/admin/queue/claim';
+  if (acao === 'close') return '/api/admin/queue/close';
 
-  if (acao === 'claim') {
-    return apoio ? '/api/admin/support/claim' : '/api/admin/chat/claim';
-  }
-  if (acao === 'close') {
-    return apoio ? '/api/admin/support/close' : '/api/admin/chat/close';
-  }
-  // As mensagens vivem em tabelas diferentes, com nomes de coluna
-  // diferentes. A rota de apoio traduz-as antes de as devolver.
+  // Para as mensagens, a fonte da conversa decide. Vem da linha da
+  // fila, que traz o campo source.
+  var apoio = fonte === 'support';
+
   if (acao === 'messages') {
     return apoio ? '/api/admin/support-chat/' : '/api/admin/chat/';
   }
+
   if (acao === 'send') {
     return apoio ? '/api/admin/support/send' : '/api/admin/chat/send';
   }
+
   return '/api/admin/chat/release';
 }
 
+/**
+ * A fila é uma só.
+ *
+ * Eram três URLs, uma por público. O público passa a ser uma
+ * etiqueta na linha — e a rota única devolve tudo, ordenado por
+ * quem espera há mais tempo.
+ */
 function filaDaAba() {
-  if (audAtual === 'customers') {
-    return { url: '/api/admin/support-queue?audience=customer', tipo: 'support' };
+  if (audAtual === 'escalated') {
+    return { url: '/api/admin/escalations', tipo: 'escalated' };
   }
-  if (audAtual === 'agents') {
-    return { url: '/api/admin/support-queue?audience=agency', tipo: 'support' };
-  }
-  return { url: '/api/admin/chats', tipo: 'partner' };
+
+  return { url: '/api/admin/queue', tipo: 'all' };
 }
 
 async function loadDesk() {
@@ -1690,14 +1710,19 @@ async function loadDesk() {
      * mesma resposta; a dos parceiros pede-a à parte, como sempre
      * pediu. Uma chamada a menos é dois segundos a menos.
      */
-    var [queue, cap] = await Promise.all([
-      deskFetch(fila.url),
-      fila.tipo === 'support'
-        ? Promise.resolve(null)
-        : deskFetch('/api/admin/capacity')
-    ]);
+    /**
+     * Uma chamada só.
+     *
+     * A fila unificada traz as conversas, os contadores e a
+     * capacidade na mesma resposta. Eram três chamadas — a dois
+     * segundos cada no plano gratuito do Render, isso são quatro
+     * segundos que o agente esperava por nada.
+     */
+    var queue = await deskFetch(fila.url);
+    var cap = queue.capacity || {};
 
-    if (fila.tipo === 'support') cap = queue.capacity || {};
+    // Os contadores vêm com a fila.
+    if (queue.counts) contagens = queue.counts;
 
     // A resposta traz as conversas de TODAS as marcas: as abas
     // precisam de contar as filas das outras para mostrar o aviso.
@@ -1708,10 +1733,6 @@ async function loadDesk() {
       : desk.todas;
 
     desk.capacity = cap || {};
-
-    // Os números das outras filas. Sem esperar: as abas atualizam
-    // quando chegarem.
-    carregarContagens();
 
     pintarMarcas();
     pintarAudTabs();
@@ -1899,8 +1920,23 @@ function renderDesk() {
       (isMine ? ' mine' : '') + (c.urgent ? ' urgent' : '') +
       (c.awaiting_reply_minutes >= 5 ? ' late' : '') +
       '" data-chat="' + escapeHtml(c.chat_id) + '" type="button">' +
-      '<div class="top"><span class="nm">' +
-      escapeHtml(quemE(c)) + '</span>' +
+      '<div class="top">' +
+      /**
+       * A etiqueta do público.
+       *
+       * Com uma fila só, é isto que diz ao agente com quem vai
+       * falar antes de abrir. Um motorista e um cliente pedem tons
+       * diferentes, e saber qual é antes de escrever poupa uma
+       * correção.
+       */
+      '<span class="aud-pill ' + escapeHtml(c.audience || '') + '">' +
+      escapeHtml({
+        drivers: 'Driver',
+        customer: 'Customer',
+        agency: 'Agency'
+      }[c.audience] || c.audience || '?') + '</span>' +
+
+      '<span class="nm">' + escapeHtml(quemE(c)) + '</span>' +
       '<span class="ago">' + escapeHtml(agoLabel(c.minutes_since)) + '</span></div>' +
       // O email por baixo do nome. Dois clientes com o mesmo
       // primeiro nome são indistinguíveis sem ele, e o agente abre
@@ -2012,9 +2048,15 @@ async function openDeskChat(chatId, forcarFonte) {
    * pesquisa, a aba pode estar noutro público — e pedir as
    * mensagens de um cliente à rota dos parceiros devolve vazio.
    */
-  var rota = forcarFonte === 'support' ? '/api/admin/support-chat/'
-    : forcarFonte === 'partner' ? '/api/admin/chat/'
-    : rotaDaAba('messages');
+  /**
+   * A rota certa para ESTA conversa.
+   *
+   * A fonte vem de quem chamou, quando sabe — da pesquisa, da
+   * conta de um cliente. Senão descobre-se pela conversa: ela tem
+   * partner_id ou audience, e isso diz de que tabela veio.
+   */
+  var fonte = forcarFonte || fonteDoChat(chatId);
+  var rota = rotaDaAba('messages', fonte);
 
   try {
     var data = await deskFetch(rota + encodeURIComponent(chatId));
@@ -2384,7 +2426,8 @@ function marcarPresenca(chatId) {
 
   if (!chatId) return;
 
-  var apoio = audAtual === 'customers' || audAtual === 'agents';
+  // A fonte vem da conversa, não da aba: a fila é uma só.
+  var apoio = fonteDoChat(desk.current) === 'support';
   var chat = chatAtual();
   var modo = (chat && chat.assigned_to === adminId()) ? 'handling' : 'viewing';
 
@@ -2440,7 +2483,8 @@ el('chatTakeBtn').addEventListener('click', async function () {
   if (!desk.current) return;
 
   var chat = chatAtual();
-  var apoio = audAtual === 'customers' || audAtual === 'agents';
+  // A fonte vem da conversa, não da aba: a fila é uma só.
+  var apoio = fonteDoChat(desk.current) === 'support';
 
   // Livre: pega-se e passa a ser minha.
   if (!chat.assigned_to) {
@@ -2485,7 +2529,8 @@ el('chatTakeBtn').addEventListener('click', async function () {
 el('chatJoinBtn').addEventListener('click', async function () {
   if (!desk.current) return;
 
-  var apoio = audAtual === 'customers' || audAtual === 'agents';
+  // A fonte vem da conversa, não da aba: a fila é uma só.
+  var apoio = fonteDoChat(desk.current) === 'support';
 
   el('chatJoinBtn').disabled = true;
 
@@ -2650,7 +2695,7 @@ el('deskFile').addEventListener('change', async function () {
 
     if (up.error) throw new Error(up.error.message);
 
-    var res = await deskFetch(rotaDaAba('send'), {
+    var res = await deskFetch(rotaDaAba('send', fonteDoChat(desk.current)), {
       chat_id: desk.current,
       body: el('chatReply').value.trim() || file.name,
       attachment_path: path,
@@ -2682,7 +2727,7 @@ el('chatSendBtn').addEventListener('click', async function () {
   el('chatSendBtn').disabled = true;
 
   try {
-    var res = await deskFetch(rotaDaAba('send'), {
+    var res = await deskFetch(rotaDaAba('send', fonteDoChat(desk.current)), {
       chat_id: desk.current,
       body: body,
       internal: deskMode === 'note',
@@ -2829,15 +2874,6 @@ var escaladas = [];
  */
 var contagens = null;
 
-async function carregarContagens() {
-  try {
-    contagens = await deskFetch('/api/admin/queue-counts');
-    pintarAudTabs();
-  } catch (e) {
-    // Falhar aqui não apaga os números anteriores: melhor um pouco
-    // desatualizados do que a zero.
-  }
-}
 
 /** O nome de quem escalou, tirado da nota. */
 function quemEscalou(nota) {
@@ -2870,7 +2906,14 @@ async function carregarEscaladas() {
  * Se dois agentes abrirem o painel, veem o mesmo — porque tudo
  * vem do mesmo sítio.
  */
-var audAtual = 'drivers';
+/**
+ * A aba: 'all' ou 'escalated'.
+ *
+ * Eram três públicos com filas separadas. O público passa a ser
+ * uma etiqueta na linha — a fila é uma, e as regras são as mesmas
+ * para toda a gente.
+ */
+var audAtual = 'all';
 
 /**
  * As abas de público, com o estado de cada fila.
@@ -3002,60 +3045,48 @@ function gravarPref(o) {
 
 function pintarAudTabs() {
   /**
-   * As abas só existem onde fazem sentido.
+   * As abas só existem no chat.
    *
    * Vivem fora dos painéis para não desaparecerem ao mudar de
-   * público — mas isso significa que apareceriam também nas
-   * reservas e nas finanças, onde não querem dizer nada.
+   * vista — mas isso significa que apareceriam nas reservas e nas
+   * finanças, onde não querem dizer nada.
    */
-  var emChat = activeTab === 'chatTab' || activeTab === 'supportTab';
+  var emChat = activeTab === 'chatTab';
   el('audTabs').classList.toggle('hidden', !emChat);
 
   if (!emChat) return;
 
-  /**
-   * Os números das TRÊS filas, vindos do servidor.
-   *
-   * Contavam-se aqui, a partir da fila aberta — e o resultado era
-   * atribuído sempre aos motoristas. As outras duas abas mostravam
-   * zero mesmo com onze clientes à espera, e isso faz o painel
-   * parecer avariado quando está certo.
-   *
-   * O browser não tem como saber quantos estão na fila que não
-   * está a ver. Só o servidor tem.
-   */
-  var estado = contagens || {
-    drivers: { espera: 0, curso: 0 },
-    customers: { espera: 0, curso: 0 },
-    agents: { espera: 0, curso: 0 },
-    escalated: { espera: 0, curso: 0 }
-  };
-
-  // A aba de escaladas só existe para supervisores.
-  el('audTabEsc').classList.toggle('hidden', !souSupervisor);
-
   qsa('[data-aud]').forEach(function (b) {
-    var qual = b.getAttribute('data-aud');
-    var e = estado[qual] || { espera: 0, curso: 0 };
-
-    b.classList.toggle('active', qual === audAtual);
-    b.classList.toggle('waiting', e.espera > 0);
-    b.classList.toggle('busy', e.espera === 0 && e.curso > 0);
+    b.classList.toggle('active', b.getAttribute('data-aud') === audAtual);
   });
 
-  var contadores = {
-    drivers: 'audNDrivers', customers: 'audNCustomers',
-    agents: 'audNAgents', escalated: 'audNEsc'
-  };
+  var n = contagens || {};
 
-  Object.keys(contadores).forEach(function (qual) {
-    var n = el(contadores[qual]);
-    if (!n || n.__missing) return;
+  /**
+   * O contador mostra quem ESPERA, não o total.
+   *
+   * Um número que conta as conversas todas — incluindo as que já
+   * têm agente — não diz nada sobre o que há a fazer.
+   */
+  var espera = el('audNAll');
 
-    var e = estado[qual] || { espera: 0 };
-    n.textContent = e.espera;
-    n.classList.toggle('hidden', !e.espera);
-  });
+  if (espera && !espera.__missing) {
+    espera.textContent = n.waiting || 0;
+    espera.classList.toggle('hidden', !n.waiting);
+  }
+
+  var esc = el('audNEsc');
+
+  if (esc && !esc.__missing) {
+    esc.textContent = escaladas.length;
+    esc.classList.toggle('hidden', !escaladas.length);
+  }
+
+  // A aba de escalada só para supervisores.
+  var tabEsc = el('audTabEsc');
+  if (tabEsc && !tabEsc.__missing) {
+    tabEsc.classList.toggle('hidden', !souSupervisor);
+  }
 }
 
 qsa('[data-aud]').forEach(function (b) {
@@ -6879,9 +6910,9 @@ async function procurarTickets() {
   var q = new URLSearchParams({
     q: el('tkQuery').value.trim(),
     status: el('tkStatus').value,
-    audience: audAtual === 'drivers' ? 'drivers'
-      : audAtual === 'agents' ? 'agency'
-      : audAtual === 'customers' ? 'customer' : 'all'
+    // Sem filtro de público: a fila é uma, e procurar em todas é
+    // o que se quer.
+    audience: 'all'
   });
 
   if (el('tkFrom').value) q.set('from', el('tkFrom').value);

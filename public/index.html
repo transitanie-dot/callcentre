@@ -561,6 +561,14 @@
         <h2>Driver partner applications</h2>
         <div class="search-grid">
           <input type="text" id="ptSearch" class="search-input" placeholder="Company, VAT, email or country">
+
+          <!-- Por zona.
+               "Quem cobre Faro?" é a pergunta mais frequente que
+               existe num painel de parceiros, e não havia forma de
+               a fazer. Aceita o código ou o nome — um supervisor
+               escreve "Faro", não "PT-FAO". -->
+          <input type="text" id="ptZone" class="search-input"
+                 placeholder="Zone: Faro, Malaga, LIS...">
           <select id="ptStatusFilter" class="search-input">
             <option value="all" selected>All</option>
             <option value="ready">Ready to approve</option>

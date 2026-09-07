@@ -157,7 +157,7 @@ var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
 var adminChatsChannel = null, adminMessagesChannel = null, adminSelectedFile = null;
 
-var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at'
+var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at, extra_amount, extra_minutes, extra_accepted_at, extra_charged_at, extra_charge_failed, no_show_at, no_show_photo, no_show_note, changed_count, last_changed_at, driver_payout, pickup_type, flight_landed_at, free_until'
 var activeBooking = null;
 
 // ============================================================
@@ -708,6 +708,90 @@ function openDetails(id) {
             })) + '</span></div>';
         }).join('')
       : '<span class="muted">Nothing yet.</span>';
+  }
+
+  // ---------- a espera cobrada ----------
+  var extraWrap = el('detailExtraWrap');
+
+  if (extraWrap && !extraWrap.__missing) {
+    var temExtra = Number(b.extra_amount || 0) > 0;
+    extraWrap.hidden = !temExtra;
+
+    if (temExtra) {
+      /**
+       * O estado da cobrança importa tanto como o valor.
+       *
+       * "Aceite mas não cobrado" é uma dívida que alguém tem de
+       * resolver. Sem isto, um agente via 20 euros e assumia que
+       * estavam pagos.
+       */
+      var estado = b.extra_charged_at
+        ? '<span class="ok">charged</span>'
+        : (b.extra_charge_failed
+            ? '<span class="bad">declined: ' +
+              escapeHtml(b.extra_charge_failed) + '</span>'
+            : '<span class="warn">accepted, not charged yet</span>');
+
+      el('detailExtra').innerHTML =
+        '<b>' + Number(b.extra_amount).toFixed(2) + ' ' +
+        escapeHtml(String(b.currency || 'EUR').toUpperCase()) + '</b> · ' +
+        escapeHtml(String(b.extra_minutes || 0)) + ' min past the free time<br>' +
+        estado;
+    }
+  }
+
+  // ---------- o no-show ----------
+  var nsWrap = el('detailNoShowWrap');
+
+  if (nsWrap && !nsWrap.__missing) {
+    nsWrap.hidden = !b.no_show_at;
+
+    if (b.no_show_at) {
+      el('detailNoShow').innerHTML =
+        '<b>' + escapeHtml(new Date(b.no_show_at).toLocaleString('en-GB', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+        })) + '</b>' +
+        (b.no_show_note ? '<br>' + escapeHtml(b.no_show_note) : '') +
+        (b.no_show_photo
+          ? '<br><button class="btn line sm" data-nsphoto="' +
+            escapeHtml(b.no_show_photo) + '" type="button" ' +
+            'style="margin-top:8px">See the photo</button>'
+          : '<br><span class="muted">No photo.</span>');
+
+      qsa('[data-nsphoto]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          verFotoNoShow(btn.getAttribute('data-nsphoto'), btn);
+        });
+      });
+    }
+  }
+
+  // ---------- as alterações ----------
+  var chWrap = el('detailChangesWrap');
+
+  if (chWrap && !chWrap.__missing) {
+    chWrap.hidden = !b.changed_count;
+
+    if (b.changed_count) {
+      el('detailChanges').innerHTML =
+        escapeHtml(String(b.changed_count)) +
+        (b.changed_count === 1 ? ' change' : ' changes') +
+        (b.last_changed_at
+          ? ', last on ' + escapeHtml(new Date(b.last_changed_at)
+              .toLocaleString('en-GB', {
+                day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+              }))
+          : '') +
+        '<br><button class="btn line sm" data-changes="' +
+        escapeHtml(b.id) + '" type="button" style="margin-top:8px">' +
+        'See what changed</button>';
+
+      qsa('[data-changes]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          verAlteracoes(btn.getAttribute('data-changes'));
+        });
+      });
+    }
   }
 
   el('detailPaymentStatus').textContent = b.payment_status || 'N/A';
@@ -6263,6 +6347,86 @@ function missingForActivation(p) {
 function docLabel(p, code) {
   var r = (p._reqs || []).find(function (x) { return x.code === code; });
   return r ? r.label : code;
+}
+
+/**
+ * A fotografia do no-show.
+ *
+ * Está num bucket privado, por boa razão: mostra o local de
+ * recolha e às vezes o carro. Um link assinado dura uma hora, que
+ * chega para olhar e não deixa nada aberto.
+ *
+ * Numa disputa, esta fotografia é a prova — e estava guardada sem
+ * ninguém lhe chegar.
+ */
+async function verFotoNoShow(caminho, botao) {
+  botao.disabled = true;
+  botao.textContent = 'Opening...';
+
+  try {
+    var r = await client.storage.from('trip-evidence')
+      .createSignedUrl(caminho, 3600);
+
+    if (r.error) throw new Error(r.error.message);
+
+    window.open(r.data.signedUrl, '_blank', 'noopener');
+  } catch (e) {
+    avisar('Could not open the photo', e.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'See the photo';
+  }
+}
+
+/**
+ * O que o cliente mudou.
+ *
+ * Se ele disser que alterou a morada, o agente vê o antes e o
+ * depois — e a hora. Sem isto, a conversa é a palavra dele contra
+ * a memória de ninguém.
+ */
+async function verAlteracoes(bookingId) {
+  try {
+    var r = await client
+      .from('booking_changes')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (r.error) throw new Error(r.error.message);
+
+    var linhas = r.data || [];
+
+    if (!linhas.length) {
+      return avisar('No changes', 'Nothing recorded for this booking.');
+    }
+
+    var texto = linhas.map(function (c) {
+      var quando = new Date(c.created_at).toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+      });
+
+      var campos = (c.fields || []).map(function (f) {
+        var antes = (c.before || {})[f];
+        var depois = (c.after || {})[f];
+        return f.replace(/_/g, ' ') + ': ' + (antes || '—') + ' → ' + (depois || '—');
+      }).join('\n');
+
+      var preco = Number(c.price_difference || 0);
+
+      return quando + ' (' + (c.changed_by_role || 'customer') + ')\n' +
+        campos +
+        (Math.abs(preco) > 0.5
+          ? '\nprice: ' + (preco > 0 ? '+' : '') + preco.toFixed(2)
+          : '') +
+        (c.partner_released ? '\npartner handed it back' : '');
+    }).join('\n\n');
+
+    avisar('What changed', texto);
+  } catch (e) {
+    avisar('Could not load', e.message);
+  }
 }
 
 // ============================================================

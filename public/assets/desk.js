@@ -1445,17 +1445,62 @@ async function renderChatCtx(chatId) {
          * agente tinha de as ir procurar noutro separador com o
          * cliente à espera.
          */
+        /**
+         * As reservas, clicáveis.
+         *
+         * Um agente que veja "Faro → Albufeira" e queira o
+         * detalhe tinha de o ir procurar noutro separador, com o
+         * cliente à espera ao telefone.
+         */
         (reservas.length
           ? '<div class="ctx-h">Bookings</div>' +
             reservas.slice(0, 5).map(function (b) {
-              return '<div class="ctx-row"><span>' +
-                escapeHtml(String(b.booking_date || '').slice(0, 10)) + '</span>' +
+              return '<button class="ctx-row ctx-link" data-ctx-booking="' +
+                escapeHtml(b.id || '') + '">' +
+                '<span>' + escapeHtml(String(b.booking_date || '').slice(0, 10)) +
+                '</span>' +
                 '<span>' + escapeHtml((b.pickup || '').split(',')[0]) +
                 ' &rarr; ' + escapeHtml((b.dropoff || '').split(',')[0]) +
-                '</span></div>';
+                '</span></button>';
             }).join('')
           : '<div class="ctx-h">Bookings</div>' +
-            '<div class="ctx-row"><span>None yet</span><span></span></div>');
+            '<div class="ctx-row"><span>None yet</span><span></span></div>') +
+
+        /**
+         * As conversas anteriores.
+         *
+         * Diz ao agente se é a primeira vez ou a quarta. Atender
+         * alguém que já ligou três vezes sem o saber é fazê-lo
+         * repetir a história toda.
+         */
+        ((c.past_chats || []).length
+          ? '<div class="ctx-h">Earlier chats</div>' +
+            c.past_chats.map(function (t) {
+              return '<button class="ctx-row ctx-link" data-ctx-chat="' +
+                escapeHtml(t.chat_id) + '" data-ctx-src="' +
+                escapeHtml(t.source || 'support') + '">' +
+                '<span>' + escapeHtml(String(t.created_at || '').slice(0, 10)) +
+                '</span>' +
+                '<span class="' + (t.status === 'open' ? 'ok' : '') + '">' +
+                escapeHtml(t.status) + '</span></button>';
+            }).join('')
+          : '');
+
+      qsa('#chatCtx [data-ctx-booking]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          switchTab('bookingsTab');
+          openDetails(b.getAttribute('data-ctx-booking'));
+        });
+      });
+
+      qsa('#chatCtx [data-ctx-chat]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          openDeskChat(
+            b.getAttribute('data-ctx-chat'),
+            b.getAttribute('data-ctx-src')
+          );
+        });
+      });
 
       // O mesmo padrão do desenho de parceiro: copiar com um
       // clique em vez de obrigar a transcrever.

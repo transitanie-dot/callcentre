@@ -151,7 +151,7 @@ var contacts = [], contactFilters = { search:'', searchId:'' }, contactPage = 1,
 var selectedContactBookings = [], selectedContactChats = [];
 var conversations = [], convFilters = { search:'', status:'', subject:'' };
 var agents = [], agentFilters = { search: '', status: 'all' };
-var partners = [], ptFilters = { search: '', status: 'all' };
+var partners = [], ptFilters = { search: '', status: 'all', zone: '' };
 var charges = [], unclaimed = [];
 var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
@@ -2062,10 +2062,20 @@ async function openDeskChat(chatId, forcarFonte) {
     var data = await deskFetch(rota + encodeURIComponent(chatId));
     desk.messages = data.messages || [];
 
-    // E os dados da conversa, se a fila não os tinha.
-    if (!chat && data.chat) {
+    /**
+     * E os dados da conversa, se a fila não os tinha.
+     *
+     * O filtro remove qualquer versão anterior da mesma conversa
+     * antes de acrescentar. Sem ele, abrir a mesma conversa duas
+     * vezes — pela pesquisa e depois pela fila — punha-a duas
+     * vezes na lista, e ela aparecia duplicada em Mine.
+     */
+    if (data.chat) {
       chat = data.chat;
-      desk.chats = desk.chats.concat([chat]);
+
+      desk.chats = desk.chats
+        .filter(function (c) { return c.chat_id !== chat.chat_id; })
+        .concat([chat]);
     }
   } catch (e) {
     avisar('Heads up', e.message);
@@ -4035,8 +4045,18 @@ function duracao(seg) {
   var m = Math.floor((s % 3600) / 60);
 
   if (h > 0) return h + 'h' + String(m).padStart(2, '0');
-  if (m > 0) return m + 'm';
-  return 'just now';
+
+  /**
+   * Zero minutos é "0m", não "just now".
+   *
+   * O "just now" servia para o tempo NUM estado, onde faz sentido.
+   * Mas a barra do dia usa a mesma função para somas — e "0m em
+   * lunch" é uma informação, enquanto "just now em lunch" parece
+   * dizer que se acabou de almoçar.
+   *
+   * Um número lê-se sem interpretar.
+   */
+  return m + 'm';
 }
 
 /**
@@ -4246,6 +4266,17 @@ function pintarDia() {
   });
 
   // O que aconteceu, não só quanto tempo passou.
+  /**
+   * O que se FEZ, primeiro.
+   *
+   * O "Rang" e o "Answered" contam ofertas — dizem se o agente
+   * atende quando lhe toca. O "Resolved" conta conversas fechadas,
+   * que é o trabalho.
+   *
+   * Um agente que resolva dez conversas que já eram dele via zero
+   * em todo o lado.
+   */
+  partes.push(bloco('Resolved', m.resolved || 0));
   partes.push(bloco('Rang', m.rang || 0));
   partes.push(bloco('Answered', m.answered || 0));
   partes.push(bloco('Missed', m.missed || 0, false, null,
@@ -7659,6 +7690,26 @@ function renderPartners() {
     list = list.filter(function (p) { return p.status === ptFilters.status; });
   }
 
+  /**
+   * Por zona.
+   *
+   * O filtro é local: as zonas já vêm carregadas com os parceiros,
+   * e uma chamada ao servidor por cada tecla seria uma chamada por
+   * cada tecla.
+   *
+   * Aceita o código e o nome — quem escreve "Faro" e quem escreve
+   * "PT-FAO" encontram o mesmo.
+   */
+  if (ptFilters.zone) {
+    var z = ptFilters.zone.toLowerCase();
+
+    list = list.filter(function (p) {
+      return (p._zones || []).some(function (codigo) {
+        return String(codigo).toLowerCase().indexOf(z) !== -1;
+      });
+    });
+  }
+
   if (ptFilters.search) {
     var q = ptFilters.search.toLowerCase();
     list = list.filter(function (p) {
@@ -8045,14 +8096,31 @@ async function decidePartner(partnerId, decision, button) {
 }
 
 el('ptSearchBtn').addEventListener('click', function () {
-  ptFilters = { search: el('ptSearch').value.trim(), status: el('ptStatusFilter').value };
+  ptFilters = {
+    search: el('ptSearch').value.trim(),
+    status: el('ptStatusFilter').value,
+    zone: el('ptZone').value.trim()
+  };
   renderPartners();
   paintTabAlerts();
 });
+
+/**
+ * A zona filtra ao escrever.
+ *
+ * É uma pergunta rápida — "quem cobre Faro?" — e obrigar a
+ * carregar num botão para a fazer é um passo a mais numa coisa que
+ * se faz vinte vezes por dia.
+ */
+el('ptZone').addEventListener('input', function () {
+  ptFilters.zone = el('ptZone').value.trim();
+  renderPartners();
+});
 el('ptResetBtn').addEventListener('click', function () {
   el('ptSearch').value = '';
+  el('ptZone').value = '';
   el('ptStatusFilter').value = 'needs';
-  ptFilters = { search: '', status: 'all' };
+  ptFilters = { search: '', status: 'all', zone: '' };
   loadPartners();
 });
 el('ptStatusFilter').addEventListener('change', function () {

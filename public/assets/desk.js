@@ -54,7 +54,44 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 
-var el = function (id) { return document.getElementById(id); };
+/**
+ * O elemento, ou um substituto inofensivo.
+ *
+ * Devolvia null quando o id não existia — e a linha seguinte,
+ * quase sempre um addEventListener, parava o ficheiro inteiro.
+ *
+ * O painel tem 300 KB e um único id em falta deixava-o em branco.
+ * Aconteceu com o ptZone: acrescentei o campo ao HTML e ao JS, o
+ * JS foi publicado primeiro, e o call centre não abriu.
+ *
+ * O substituto aceita tudo e não faz nada. Quem quiser saber se o
+ * elemento existe verifica o __missing — é o que várias funções já
+ * fazem.
+ */
+var elVazio = null;
+
+var el = function (id) {
+  var n = document.getElementById(id);
+  if (n) return n;
+
+  if (!elVazio) {
+    elVazio = document.createElement('div');
+    elVazio.__missing = true;
+
+    // Os métodos que o código chama sem verificar.
+    elVazio.addEventListener = function () {};
+    elVazio.removeEventListener = function () {};
+    elVazio.focus = function () {};
+    elVazio.click = function () {};
+    elVazio.scrollIntoView = function () {};
+  }
+
+  // O aviso fica na consola: um id em falta é um bug, mesmo que
+  // não parta nada.
+  console.warn('[desk] missing element:', id);
+
+  return elVazio;
+};
 var qsa = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
 // ============================================================

@@ -686,14 +686,18 @@
            encontrava. São a coisa mais usada do painel: quem está
            à espera, quem já tem alguém, e o que é meu. -->
       <div class="q-views" id="qViews">
-        <button class="q-view on" data-qview="waiting" type="button">
+        <!-- As minhas primeiro.
+             É a vista que o agente olha ao chegar e entre
+             conversas — estava em terceiro, depois de duas que só
+             interessam quando se procura trabalho novo. -->
+        <button class="q-view on primary" data-qview="mine" type="button">
+          Mine <span class="q-n" id="qnMine">0</span>
+        </button>
+        <button class="q-view primary" data-qview="waiting" type="button">
           Waiting <span class="q-n" id="qnWaiting">0</span>
         </button>
         <button class="q-view" data-qview="taken" type="button">
           With an agent <span class="q-n" id="qnTaken">0</span>
-        </button>
-        <button class="q-view" data-qview="mine" type="button">
-          Mine <span class="q-n" id="qnMine">0</span>
         </button>
         <button class="q-view" data-qview="closed" type="button">Closed</button>
 

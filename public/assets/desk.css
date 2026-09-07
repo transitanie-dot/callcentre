@@ -1634,7 +1634,18 @@
   letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;
   border-radius:999px;white-space:nowrap}
 .tk-state.open{background:var(--ok-bg);color:var(--ok)}
+.tk-state.pending{background:var(--warn-bg);color:var(--warn)}
+.tk-state.resolved{background:var(--card-2);color:var(--muted)}
 .tk-state.closed{background:var(--card-2);color:var(--muted)}
+
+/* O número do ticket, à frente do nome. É por ele que o cliente
+   se identifica ao telefone. */
+.tk-ref{font-family:var(--mono);font-size:11px;font-weight:600;
+  padding:2px 7px;border-radius:6px;background:var(--card-2);
+  color:var(--muted);flex:0 0 auto}
+
+.tk-top b{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
 
 .tk-snip{font-size:13px;color:var(--muted);margin-bottom:4px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1649,3 +1660,19 @@
   .tk-search{padding:0 12px 12px}
   .tk-filters input[type="date"]{flex:1 1 45%}
 }
+
+/* O nome e a foto no mesmo sítio.
+   Eram duas coisas da mesma pessoa em dois cantos do ecrã. */
+.duty-edit{display:flex;gap:6px;margin-top:10px}
+.duty-edit button{flex:1;padding:6px 10px;border-radius:8px;
+  border:1px solid var(--border);background:transparent;
+  color:var(--muted);font-family:inherit;font-size:11.5px;
+  font-weight:600;cursor:pointer}
+.duty-edit button:hover{color:var(--text);border-color:var(--muted)}
+
+/* Uma linha que se clica diz que se clica.
+   Sem isto, um agente com o cliente ao telefone não sabe que pode
+   abrir a reserva daí. */
+tr.clickable{cursor:pointer}
+tr.clickable:hover{background:var(--card-2)}
+tr.clickable td:first-child strong{color:var(--primary)}

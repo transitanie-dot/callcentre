@@ -1716,3 +1716,30 @@ tr.clickable td:first-child strong{color:var(--primary)}
 @media (max-width:560px){
   .pt-step{font-size:9.5px;padding:3px 6px}
 }
+
+/* ============================================================
+   A ETIQUETA DO PÚBLICO
+
+   Com uma fila só, é isto que diz ao agente com quem vai falar
+   antes de abrir. Um motorista e um cliente pedem tons
+   diferentes, e saber qual é antes de escrever poupa uma
+   correção.
+
+   Três cores discretas: identificam sem competir com o nome, que
+   é o que se lê primeiro.
+   ============================================================ */
+.aud-pill{font-family:var(--mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;
+  border-radius:5px;margin-right:7px;flex:0 0 auto;
+  background:var(--card-2);color:var(--muted)}
+
+.aud-pill.drivers{background:rgba(13,148,136,.15);color:var(--teal,#0D9488)}
+.aud-pill.customer{background:rgba(37,99,235,.14);color:#2563EB}
+.aud-pill.agency{background:rgba(147,51,234,.14);color:#9333EA}
+
+html[data-theme="dark"] .aud-pill.customer{color:#60A5FA}
+html[data-theme="dark"] .aud-pill.agency{color:#C084FC}
+
+.chat-row .top{display:flex;align-items:center;gap:0}
+.chat-row .nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}

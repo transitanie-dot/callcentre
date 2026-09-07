@@ -1777,18 +1777,48 @@ function renderDesk() {
  * decorrer com outro agente: quem cobre um turno precisa de saber o
  * que já foi dito.
  */
-async function openDeskChat(chatId) {
+async function openDeskChat(chatId, forcarFonte) {
+  /**
+   * A conversa pode não estar na fila carregada.
+   *
+   * A fila mostra os abertos do público ativo. Um ticket vindo da
+   * pesquisa — fechado, de outro público, de há três meses — não
+   * está lá, e o painel saía logo sem dizer nada.
+   *
+   * Se não a encontrar, pede-a ao servidor.
+   */
   var chat = desk.chats.find(function (c) { return c.chat_id === chatId; });
-  if (!chat) return;
 
   desk.current = chatId;
 
+  /**
+   * A rota certa para ESTA conversa.
+   *
+   * A da aba serve quando a conversa veio da fila. Vinda da
+   * pesquisa, a aba pode estar noutro público — e pedir as
+   * mensagens de um cliente à rota dos parceiros devolve vazio.
+   */
+  var rota = forcarFonte === 'support' ? '/api/admin/support-chat/'
+    : forcarFonte === 'partner' ? '/api/admin/chat/'
+    : rotaDaAba('messages');
+
   try {
-    var data = await deskFetch(rotaDaAba('messages') + encodeURIComponent(chatId));
+    var data = await deskFetch(rota + encodeURIComponent(chatId));
     desk.messages = data.messages || [];
+
+    // E os dados da conversa, se a fila não os tinha.
+    if (!chat && data.chat) {
+      chat = data.chat;
+      desk.chats = desk.chats.concat([chat]);
+    }
   } catch (e) {
     avisar('Heads up', e.message);
     return;
+  }
+
+  if (!chat) {
+    return avisar('Not found',
+      'That conversation could not be loaded. It may have been deleted.');
   }
 
   el('chatBlank').classList.add('hidden');
@@ -3020,11 +3050,18 @@ async function loadDisplayName() {
 }
 
 function paintDisplayName() {
-  el('deskNameText').textContent = deskDisplayName || 'Set your name';
-  el('deskName').classList.toggle('unset', !deskDisplayName);
+  /**
+   * O nome aparece no menu do avatar, não numa barra à parte.
+   *
+   * O botão da barra foi removido: o nome e a foto são da mesma
+   * pessoa e estavam em dois cantos do ecrã.
+   *
+   * O pintarDuty redesenha o menu e o nome vai com ele.
+   */
+  pintarDuty();
 }
 
-el('deskName').addEventListener('click', async function () {
+async function editarNome() {
   var name = await pedirTexto(
     'Your display name',
     'What name should partners see when you reply?\n\n' +
@@ -3047,7 +3084,8 @@ el('deskName').addEventListener('click', async function () {
   } catch (e) {
     avisar('Heads up', e.message);
   }
-});
+}
+
 
 el('chatReply').addEventListener('keydown', function (e) {
   var aberto = !el('snipBox').hidden;
@@ -3467,6 +3505,18 @@ function pintarDuty() {
     '<span>' + escapeHtml(adminEmail()) + '</span>' +
     '<span class="duty-role' + (souSupervisor ? '' : ' agent') + '">' +
     escapeHtml(souSupervisor ? 'Supervisor' : 'Agent') + '</span>' +
+
+    /**
+     * O nome e a foto no mesmo sítio.
+     *
+     * O nome era um botão à parte na barra, longe da foto — duas
+     * coisas da mesma pessoa em dois cantos do ecrã. Aqui estão
+     * onde já se vai para trocar a fotografia.
+     */
+    '<div class="duty-edit">' +
+      '<button type="button" data-edit-name>Change name</button>' +
+      '<button type="button" data-edit-photo>Change photo</button>' +
+    '</div>' +
     '</div>';
 
   el('dutyMenu').innerHTML = cabeca + STATES.map(function (st) {
@@ -3524,6 +3574,27 @@ function pintarDuty() {
       fecharDuty();
       pararEscolha();
       setDeskState(b.getAttribute('data-duty-opt'));
+    });
+  });
+
+  /**
+   * O nome e a foto, no mesmo sítio.
+   *
+   * O stopPropagation impede o menu de fechar: quem carrega em
+   * "change name" quer escrever, não voltar ao início.
+   */
+  qsa('[data-edit-name]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      fecharDuty();
+      editarNome();
+    });
+  });
+
+  qsa('[data-edit-photo]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      el('avatarFile').click();
     });
   });
 
@@ -4936,13 +5007,35 @@ async function loadAccountBookings(email) {
   }
 
   tbody.innerHTML = selectedContactBookings.map(function (b) {
-    return '<tr><td><strong>' + escapeHtml(bookingRef(b)) + '</strong></td>' +
+    /**
+     * A linha inteira abre a reserva.
+     *
+     * Um agente que veja "três reservas" e não possa clicar em
+     * nenhuma tem de as procurar à mão no separador ao lado — com o
+     * cliente à espera ao telefone.
+     */
+    return '<tr class="clickable" data-open-booking="' + escapeHtml(b.id) +
+      '"><td><strong>' + escapeHtml(bookingRef(b)) + '</strong></td>' +
       '<td>' + escapeHtml(b.pickup || 'N/A') + ' &rarr; ' + escapeHtml(b.dropoff || 'N/A') + '</td>' +
       '<td>' + escapeHtml(bookingWhen(b)) + '</td>' +
       '<td>' + escapeHtml(money(b.currency, b.price)) + '</td>' +
       '<td><span class="status ' + escapeHtml(b.status || 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span></td>' +
       '<td>' + (b.receipt_url ? '<a class="receipt-link" href="' + escapeHtml(b.receipt_url) + '" target="_blank" rel="noopener">Open</a>' : 'N/A') + '</td></tr>';
   }).join('');
+
+  qsa('[data-open-booking]').forEach(function (linha) {
+    linha.addEventListener('click', function (e) {
+      // O link do recibo abre sozinho: um clique nele não devia
+      // fazer duas coisas.
+      if (e.target.closest('a')) return;
+
+      // A conta fecha-se: o agente vai para a reserva, não fica
+      // com duas janelas abertas.
+      el('accountDetailsModal').classList.add('hidden');
+      switchTab('bookingsTab');
+      openDetails(linha.getAttribute('data-open-booking'));
+    });
+  });
 }
 
 async function loadAccountChats(email) {
@@ -4973,13 +5066,33 @@ async function loadAccountChats(email) {
   }));
 
   tbody.innerHTML = selectedContactChats.map(function (c) {
-    return '<tr><td><strong>' + escapeHtml(c.ticket_number || String(c.id).slice(0, 8)) + '</strong></td>' +
+    // A linha abre a conversa, como nas reservas.
+    return '<tr class="clickable" data-open-chat="' + escapeHtml(c.id) +
+      '"><td><strong>' +
+      escapeHtml(c.ticket_number || c.ticket || String(c.id).slice(0, 8)) +
+      '</strong></td>' +
       '<td>' + escapeHtml(c.subject || '-') + '</td>' +
       '<td><span class="status ' + escapeHtml(c.status) + '">' + escapeHtml(c.status) + '</span></td>' +
       '<td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
         (c.last_sender === 'admin' ? 'Support: ' : '') + escapeHtml(c.last_message || '-') + '</td>' +
       '<td>' + escapeHtml(formatTime(c.updated_at)) + '</td></tr>';
   }).join('');
+
+  qsa('[data-open-chat]').forEach(function (linha) {
+    linha.addEventListener('click', function () {
+      el('accountDetailsModal').classList.add('hidden');
+      switchTab('chatTab');
+
+      /**
+       * A fonte é 'support': estes chats vêm da conta de um
+       * cliente, e os de parceiro não aparecem aqui.
+       *
+       * Sem a fonte, o painel pedia as mensagens à rota dos
+       * parceiros e recebia vazio.
+       */
+      openDeskChat(linha.getAttribute('data-open-chat'), 'support');
+    });
+  });
 }
 
 // ============================================================
@@ -6517,8 +6630,16 @@ function pintarTickets(lista) {
       '" data-source="' + escapeHtml(t.source) + '" type="button">' +
 
       '<div class="tk-top">' +
+        /**
+         * O número do ticket primeiro.
+         *
+         * É por ele que o cliente se identifica ao telefone, e era
+         * a única coisa que faltava na lista — estava no fim, entre
+         * a data e o nome do agente.
+         */
+        '<code class="tk-ref">' + escapeHtml(t.ticket || '—') + '</code>' +
         '<b>' + escapeHtml(t.who || t.email || '—') + '</b>' +
-        '<span class="tk-state ' + (t.status === 'open' ? 'open' : 'closed') + '">' +
+        '<span class="tk-state ' + escapeHtml(t.status) + '">' +
           escapeHtml(t.status) + '</span>' +
       '</div>' +
 
@@ -6530,7 +6651,7 @@ function pintarTickets(lista) {
         escapeHtml(quando) + ' &middot; ' +
         escapeHtml(String(t.messages || 0)) + ' messages' +
         (t.agent_name ? ' &middot; ' + escapeHtml(t.agent_name) : '') +
-        (t.ticket ? ' &middot; ' + escapeHtml(t.ticket) : '') +
+
         (t.resolution
           ? '<br><span class="tk-res">' + escapeHtml(t.resolution.slice(0, 90)) + '</span>'
           : '') +
@@ -6548,7 +6669,10 @@ function pintarTickets(lista) {
        * fechado não aceita mensagens novas. Quem quiser continuar a
        * conversa reabre-a pelo botão próprio.
        */
-      openDeskChat(b.getAttribute('data-ticket'));
+      openDeskChat(
+        b.getAttribute('data-ticket'),
+        b.getAttribute('data-source')
+      );
     });
   });
 }

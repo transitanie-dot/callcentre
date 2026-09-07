@@ -2981,7 +2981,9 @@ function pintarVistas(lista) {
     mine: lista.filter(function (c) { return c.assigned_to === meu; }).length
   };
 
-  ['waiting', 'taken', 'mine'].forEach(function (k) {
+  n.all = lista.length;
+
+  ['waiting', 'taken', 'mine', 'all'].forEach(function (k) {
     var el2 = el('qn' + k.charAt(0).toUpperCase() + k.slice(1));
     if (el2 && !el2.__missing) el2.textContent = n[k];
   });
@@ -3012,9 +3014,19 @@ function filtrarConversas(lista) {
      * Dois agentes podem trabalhar a mesma, e esconder o que já tem
      * alguém impedia isso.
      */
-    if (vistaAtual === 'waiting') return !c.assigned_to;
     if (vistaAtual === 'mine') return c.assigned_to === adminId();
+    if (vistaAtual === 'waiting') return !c.assigned_to;
     if (vistaAtual === 'taken') return c.assigned_to && c.assigned_to !== adminId();
+
+    /**
+     * 'all' mostra tudo o que está aberto.
+     *
+     * Serve para o caso em que o agente não sabe onde procurar —
+     * uma conversa que ele fechou por engano, ou que alguém lhe
+     * mencionou. Sem isto tinha de experimentar as três vistas.
+     */
+    if (vistaAtual === 'all') return true;
+
     // 'closed' esconde as abertas: as fechadas vêm de outra lista.
     if (vistaAtual === 'closed') return false;
 
@@ -7272,6 +7284,324 @@ function pintarCobertura(zonas, resumo) {
     }).join('');
 }
 
+// ============================================================
+// O PERFIL COMPLETO DE UM PARCEIRO
+//
+// Tudo o que ele submeteu, numa folha. Estava na base e ninguém o
+// via — um supervisor que decide aprovar ou rejeitar precisa de
+// ver o que está a aprovar.
+//
+// A rota /api/admin/partner/:id/full existia há semanas e nunca
+// foi chamada.
+// ============================================================
+
+var perfilAberto = null;
+
+async function abrirPerfil(id) {
+  var back = el('pfBack');
+  if (!back || back.__missing) return;
+
+  perfilAberto = id;
+
+  el('pfName').textContent = 'Loading...';
+  el('pfSub').textContent = '';
+  el('pfBody').innerHTML = '<div class="loading-row">Loading...</div>';
+  el('pfActs').innerHTML = '';
+
+  back.hidden = false;
+
+  try {
+    var d = await deskFetch('/api/admin/partner/' + encodeURIComponent(id) + '/full');
+    pintarPerfil(d);
+  } catch (e) {
+    el('pfBody').innerHTML = '<div class="error-row">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function fecharPerfil() {
+  el('pfBack').hidden = true;
+  perfilAberto = null;
+}
+
+function pintarPerfil(d) {
+  var p = d.partner || d;
+
+  el('pfName').textContent = p.legal_name || p.trading_name || '(no name)';
+
+  el('pfSub').textContent = [
+    p.trading_name && p.trading_name !== p.legal_name ? 'Trading as ' + p.trading_name : '',
+    p.country,
+    p.status
+  ].filter(Boolean).join(' · ');
+
+  var linha = function (k, v, classe) {
+    return '<div class="pf-row"><span>' + escapeHtml(k) + '</span>' +
+      '<span class="' + (classe || '') + '">' +
+      escapeHtml(v == null || v === '' ? '—' : String(v)) + '</span></div>';
+  };
+
+  var html = '';
+
+  // ---------- a empresa ----------
+  html += '<div class="pf-sec"><h3>Company</h3>' +
+    linha('Legal name', p.legal_name) +
+    linha('Trading as', p.trading_name) +
+    linha('VAT number', p.vat_number) +
+    linha('Country', p.country) +
+    linha('Address', [p.address_line, p.city, p.postcode].filter(Boolean).join(', ')) +
+    linha('Registered', p.created_at ? String(p.created_at).slice(0, 10) : null) +
+    linha('Submitted', p.submitted_at ? String(p.submitted_at).slice(0, 10) : null) +
+    '</div>';
+
+  // ---------- o contacto ----------
+  html += '<div class="pf-sec"><h3>Contact</h3>' +
+    linha('Name', p.contact_name) +
+    linha('Role', p.contact_role) +
+    linha('Email', p.email) +
+    linha('Phone', p.contact_phone || p.phone) +
+    '</div>';
+
+  // ---------- o pagamento ----------
+  html += '<div class="pf-sec"><h3>Payout</h3>' +
+    linha('Account holder', p.payout_name) +
+    linha('IBAN', p.payout_iban,
+      p.payout_iban ? '' : 'bad') +
+    linha('BIC', p.payout_bic) +
+    '</div>';
+
+  // ---------- as zonas ----------
+  var zonas = d.zones || [];
+
+  html += '<div class="pf-sec"><h3>Zones ' +
+    '<span class="pf-count">' + zonas.length + '</span></h3>' +
+    (zonas.length
+      ? '<div class="pf-tags">' + zonas.map(function (z) {
+          return '<span class="pf-tag">' + escapeHtml(z) + '</span>';
+        }).join('') + '</div>'
+      : '<div class="pf-empty">No zones chosen. They will not receive rides.</div>') +
+    '</div>';
+
+  // ---------- os motoristas ----------
+  var motoristas = d.drivers || [];
+
+  html += '<div class="pf-sec"><h3>Drivers ' +
+    '<span class="pf-count">' + motoristas.length + '</span></h3>' +
+    (motoristas.length
+      ? motoristas.map(function (m) {
+          return '<div class="pf-item">' +
+            '<b>' + escapeHtml(m.full_name || '—') + '</b>' +
+            '<span>' + escapeHtml(m.phone || 'no phone') +
+            (m.licence_number ? ' · licence ' + escapeHtml(m.licence_number) : '') +
+            '</span>' +
+            '<span class="pf-st ' + escapeHtml(m.status || '') + '">' +
+            escapeHtml(m.status || '') + '</span>' +
+          '</div>';
+        }).join('')
+      : '<div class="pf-empty">No drivers registered.</div>') +
+    '</div>';
+
+  // ---------- as viaturas ----------
+  var viaturas = d.vehicles || [];
+
+  html += '<div class="pf-sec"><h3>Vehicles ' +
+    '<span class="pf-count">' + viaturas.length + '</span></h3>' +
+    (viaturas.length
+      ? viaturas.map(function (v) {
+          return '<div class="pf-item">' +
+            '<b>' + escapeHtml((v.make || '') + ' ' + (v.model || '')) + '</b>' +
+            '<span>' + escapeHtml(v.plate || 'no plate') +
+            ' · ' + escapeHtml(String(v.seats || '?')) + ' seats' +
+            (v.year ? ' · ' + escapeHtml(String(v.year)) : '') +
+            '</span>' +
+            '<span class="pf-st ' + escapeHtml(v.status || '') + '">' +
+            escapeHtml(v.status || '') + '</span>' +
+          '</div>';
+        }).join('')
+      : '<div class="pf-empty">No vehicles registered.</div>') +
+    '</div>';
+
+  /**
+   * Os documentos, com o que FALTA.
+   *
+   * Listar o que foi entregue não chega: a pergunta de um
+   * supervisor é "posso aprovar?", e a resposta está no que falta.
+   */
+  var docs = d.documents || [];
+  var exigidos = d.required || [];
+
+  html += '<div class="pf-sec"><h3>Documents</h3>';
+
+  if (exigidos.length) {
+    html += exigidos.map(function (r) {
+      var doc = docs.find(function (x) {
+        return x.requirement_code === r.code && !x.driver_id && !x.vehicle_id;
+      });
+
+      if (!doc) {
+        return '<div class="pf-item missing">' +
+          '<b>' + escapeHtml(r.label || r.code) + '</b>' +
+          '<span>Not uploaded</span></div>';
+      }
+
+      var expirado = doc.expires_on && new Date(doc.expires_on) < new Date();
+
+      return '<div class="pf-item' + (doc.status === 'rejected' ? ' missing' : '') + '">' +
+        '<b>' + escapeHtml(r.label || r.code) + '</b>' +
+        '<span>' +
+          (doc.expires_on
+            ? (expirado ? 'Expired ' : 'Valid until ') + escapeHtml(doc.expires_on)
+            : 'No expiry') +
+        '</span>' +
+        '<button class="pf-doc" data-doc="' + escapeHtml(doc.file_path || '') + '">View</button>' +
+        '<span class="pf-st ' + escapeHtml(doc.status || '') + '">' +
+        escapeHtml(doc.status || '') + '</span>' +
+      '</div>';
+    }).join('');
+  } else {
+    html += '<div class="pf-empty">No requirements set for this country.</div>';
+  }
+
+  html += '</div>';
+
+  el('pfBody').innerHTML = html;
+
+  // ---------- as decisões ----------
+  pintarDecisoes(p, d);
+
+  // Ver um documento.
+  qsa('#pfBody [data-doc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      verDocumento(b.getAttribute('data-doc'), b);
+    });
+  });
+}
+
+/**
+ * Aprovar ou rejeitar.
+ *
+ * O botão faltava por inteiro — um supervisor via a candidatura e
+ * não tinha por onde decidir.
+ */
+function pintarDecisoes(p, d) {
+  var caixa = el('pfActs');
+
+  if (p.status === 'approved') {
+    caixa.innerHTML =
+      '<span class="pf-ok">Approved</span>' +
+      '<button class="btn line sm" data-decide="suspended" type="button">Suspend</button>';
+  } else if (p.status === 'rejected' || p.status === 'suspended') {
+    caixa.innerHTML =
+      '<span class="pf-no">' + escapeHtml(p.status) + '</span>' +
+      '<button class="btn teal sm" data-decide="approved" type="button">Approve</button>';
+  } else {
+    /**
+     * O que falta, dito antes de decidir.
+     *
+     * Aprovar um parceiro sem viatura é aprová-lo para não receber
+     * viagem nenhuma — e ninguém dá por isso até ele se queixar.
+     */
+    var falta = [];
+
+    if (!(d.zones || []).length) falta.push('zones');
+    if (!(d.drivers || []).length) falta.push('drivers');
+    if (!(d.vehicles || []).length) falta.push('vehicles');
+    if (!p.payout_iban) falta.push('IBAN');
+
+    caixa.innerHTML =
+      (falta.length
+        ? '<span class="pf-warn">Missing: ' + escapeHtml(falta.join(', ')) + '</span>'
+        : '<span class="pf-ok">Everything is in</span>') +
+      '<button class="btn line sm" data-decide="rejected" type="button">Reject</button>' +
+      '<button class="btn teal sm" data-decide="approved" type="button">Approve</button>';
+  }
+
+  qsa('#pfActs [data-decide]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      decidirParceiro(b.getAttribute('data-decide'), b);
+    });
+  });
+}
+
+async function decidirParceiro(decisao, botao) {
+  var motivo = null;
+
+  if (decisao !== 'approved') {
+    motivo = prompt(
+      'Why? They see this, so write it as if to them.\n\n' +
+      'Example: "The insurance certificate has expired. Upload a current one."'
+    );
+
+    if (motivo === null) return;
+
+    if (motivo.trim().length < 10) {
+      return avisar('Say why',
+        'A rejection without a reason means they write back asking why. ' +
+        'One sentence saves that.');
+    }
+  } else {
+    if (!await perguntar('Approve this partner?',
+        'They start receiving ride offers straight away.')) return;
+  }
+
+  botao.disabled = true;
+
+  try {
+    await deskFetch('/api/admin/partner/decision', {
+      partner_id: perfilAberto,
+      decision: decisao,
+      reason: motivo ? motivo.trim() : null
+    });
+
+    await abrirPerfil(perfilAberto);
+    loadPartners();
+  } catch (e) {
+    botao.disabled = false;
+    avisar('Could not save', e.message);
+  }
+}
+
+/** Abrir um documento. Link assinado, uma hora. */
+async function verDocumento(caminho, botao) {
+  if (!caminho) return avisar('No file', 'This document has no stored file.');
+
+  botao.disabled = true;
+
+  try {
+    var r = await client.storage.from(PARTNER_BUCKET)
+      .createSignedUrl(caminho, 3600);
+
+    if (r.error) throw new Error(r.error.message);
+
+    window.open(r.data.signedUrl, '_blank', 'noopener');
+  } catch (e) {
+    avisar('Could not open', e.message);
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+(function () {
+  var x = el('pfClose');
+  if (x && !x.__missing) x.addEventListener('click', fecharPerfil);
+
+  var back = el('pfBack');
+  if (back && !back.__missing) {
+    back.addEventListener('click', function (e) {
+      // Só o fundo fecha: um clique dentro da folha não devia
+      // perder o que se estava a ler.
+      if (e.target === back) fecharPerfil();
+    });
+  }
+})();
+
+function ligarAberturaPerfil() {
+  qsa('[data-open-partner]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      abrirPerfil(b.getAttribute('data-open-partner'));
+    });
+  });
+}
+
 function renderPartners() {
   var box = el('ptList');
   var list = partners.slice();
@@ -7474,7 +7804,16 @@ function renderPartners() {
 
     return '<div class="pt-card ' + (needsAction(p) ? 'needs' : '') + '">' +
       '<div class="pt-head"><div>' +
-      '<h3>' + escapeHtml(p.legal_name || '(no name)') + '</h3>' +
+      /**
+       * O nome abre o perfil completo.
+       *
+       * Tudo o que o parceiro submeteu estava na base e ninguém o
+       * via — e um supervisor que decide aprovar precisa de ver o
+       * que está a aprovar.
+       */
+      '<h3><button class="pt-open" data-open-partner="' + escapeHtml(p.id) +
+      '" type="button">' + escapeHtml(p.legal_name || '(no name)') +
+      '</button></h3>' +
       (p.trading_name && p.trading_name !== p.legal_name
         ? '<div class="who">Trading as ' + escapeHtml(p.trading_name) + '</div>' : '') +
       '<div class="who">' + escapeHtml(p.contact_name || '-') +
@@ -7553,6 +7892,9 @@ function renderPartners() {
       decideDocument(b.getAttribute('data-docno'), 'rejected', why.trim(), b);
     });
   });
+
+  // E o nome abre o perfil completo.
+  ligarAberturaPerfil();
 
   reportHeight();
 }

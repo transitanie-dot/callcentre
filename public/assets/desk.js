@@ -2930,8 +2930,27 @@ async function iniciarApoio() {
   if (desk.state === 'live' || desk.state === 'active') unlockAudio();
 
   // ---------- os atalhos ----------
+  /**
+   * Os atalhos, com os nomes que a tabela tiver.
+   *
+   * A support_snippets cresceu ao longo de vários ficheiros e as
+   * colunas não têm nomes garantidos — pode ser title ou label,
+   * body ou text.
+   *
+   * O servidor manda a linha inteira e o painel procura o que
+   * reconhece. Assim uma coluna com outro nome não parte nada.
+   */
   snips.todos = (ses.snippets || []).map(function (x) {
-    return { id: x.id, shortcut: x.shortcut, title: x.title, body: x.body, mine: x.mine };
+    return {
+      id: x.id,
+      shortcut: x.shortcut || x.code || x.trigger,
+      title: x.title || x.label || x.name || x.shortcut,
+      body: x.body || x.text || x.content || '',
+      mine: Boolean(x.mine)
+    };
+  }).filter(function (x) {
+    // Um atalho sem gatilho ou sem texto não serve para nada.
+    return x.shortcut && x.body;
   });
 
   // A fila de escaladas, se for supervisor. Um caso escalado à

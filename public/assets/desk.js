@@ -7271,6 +7271,37 @@ function renderPartners() {
       : (p.status === 'rejected' || p.status === 'suspended') ? 'cancelled'
       : (p.status === 'verified' ? 'verified' : 'pending');
 
+    /**
+     * Os cinco passos do registo, num relance.
+     *
+     * O painel mostrava documentos e mais nada — um supervisor com
+     * cinco agências à espera não sabia em que passo cada uma
+     * estava, nem o que faltava a quem.
+     *
+     * Isto responde à pergunta que se faz ao olhar para a lista:
+     * "o que é que falta a esta?"
+     */
+    var passos = [
+      ['Company', Boolean(p.legal_name && p.vat_number)],
+      ['Zones', (p._zones || []).length > 0],
+      ['Drivers', (p._drivers || []).length > 0],
+      ['Vehicles', (p._vehicles || []).length > 0],
+      ['Documents', (p._docs || []).some(function (d) {
+        return d.status === 'approved';
+      })]
+    ];
+
+    var feitos = passos.filter(function (x) { return x[1]; }).length;
+
+    var passosHtml =
+      '<div class="pt-steps">' +
+        passos.map(function (x) {
+          return '<span class="pt-step' + (x[1] ? ' done' : '') + '">' +
+            escapeHtml(x[0]) + '</span>';
+        }).join('') +
+        '<span class="pt-count">' + feitos + '/5</span>' +
+      '</div>';
+
     var signupReqs = (p._reqs || []).filter(function (r) {
       return r.scope === 'company' && r.stage === 'signup' && r.mandatory;
     });
@@ -7422,8 +7453,17 @@ function renderPartners() {
       '</div></div>' +
       '<span class="status ' + statusClass + '">' + escapeHtml(p.status) + '</span></div>' +
 
-      // O ponto da situação, logo abaixo do nome. É a primeira
-      // pergunta que se faz e era a última a ter resposta.
+      /**
+       * Os cinco passos, e depois os documentos.
+       *
+       * A barra dizia quantos documentos estavam aprovados — mas um
+       * parceiro pode ter os documentos todos e não ter registado
+       * viatura nenhuma.
+       *
+       * Os passos dizem em que ponto está; a barra diz o detalhe do
+       * último.
+       */
+      passosHtml +
       barra +
 
       '<div class="pt-facts">' +

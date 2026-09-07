@@ -1284,12 +1284,31 @@ function pararRelogio() {
   chatClock.timer = null;
 }
 
+/**
+ * Há quanto tempo, em palavras.
+ *
+ * Arredondar às horas escondia informação: "2h" tanto podia ser
+ * duas horas como duas horas e cinquenta minutos, e a diferença
+ * importa quando se decide o que atender primeiro.
+ *
+ * Abaixo de um dia mostra horas e minutos. Acima, dias e horas.
+ */
 function agoLabel(minutes) {
   var m = Math.round(Number(minutes) || 0);
+
   if (m < 1) return 'now';
   if (m < 60) return m + 'm';
-  if (m < 1440) return Math.round(m / 60) + 'h';
-  return Math.round(m / 1440) + 'd';
+
+  if (m < 1440) {
+    var h = Math.floor(m / 60);
+    var resto = m % 60;
+    return resto ? h + 'h' + String(resto).padStart(2, '0') : h + 'h';
+  }
+
+  var d = Math.floor(m / 1440);
+  var hd = Math.floor((m % 1440) / 60);
+
+  return hd ? d + 'd ' + hd + 'h' : d + 'd';
 }
 
 /**
@@ -1372,9 +1391,19 @@ async function renderChatCtx(chatId) {
     if (apoio) {
       var reservas = c.bookings || [];
 
+      /**
+       * O valor na moeda da reserva.
+       *
+       * O money() assume euros. Um cliente que pagou em libras via
+       * "EUR 240" para 240 libras — um número certo com a etiqueta
+       * errada, que é pior do que nenhum número.
+       */
+      var gasto = escapeHtml(String(c.currency || 'EUR').toUpperCase()) +
+        ' ' + Number(c.spent || 0).toFixed(0);
+
       box.innerHTML =
         '<div class="ctx-big"><div class="k">Spent with us</div>' +
-        '<div class="v">' + escapeHtml(money(c.spent)) + '</div></div>' +
+        '<div class="v">' + gasto + '</div></div>' +
 
         '<div class="ctx-h">' +
         escapeHtml(c.audience === 'agency' ? 'Agency' : 'Customer') + '</div>' +
@@ -1394,6 +1423,9 @@ async function renderChatCtx(chatId) {
 
         '<div class="ctx-row"><span>Since</span><span>' +
           escapeHtml(since) + '</span></div>' +
+
+        '<div class="ctx-row"><span>Bookings</span><span>' +
+          escapeHtml(String(c.bookings_total || 0)) + '</span></div>' +
 
         (c.agency_status
           ? '<div class="ctx-row"><span>Status</span><span class="' +
@@ -2822,7 +2854,14 @@ var audAtual = 'drivers';
 // agentes podem trabalhar a mesma, e esconder o que já tem alguém
 // impedia isso.
 // ============================================================
-var vistaAtual = 'waiting';
+/**
+ * A vista de abertura: as minhas.
+ *
+ * Abria em "waiting", que é onde se procura trabalho novo. Mas o
+ * agente olha primeiro para o que já tem — e só depois para o que
+ * há por pegar.
+ */
+var vistaAtual = 'mine';
 
 qsa('[data-qview]').forEach(function (b) {
   b.addEventListener('click', function () {
@@ -4055,20 +4094,27 @@ function pintarDia() {
   var partes = [];
 
   /**
-   * Os três estados que interessam sempre, mesmo a zero.
+   * Os estados que interessam sempre, mesmo a zero.
    *
-   * Live, break e offline aparecem sempre: "zero minutos em break"
-   * é uma informação, e escondê-la faria a barra mudar de tamanho
-   * ao longo do dia. Os outros só aparecem quando houve tempo lá.
+   * O OFFLINE saiu. O tempo offline não é medido — o
+   * agent_state_log não abre período para ele, de propósito:
+   * ninguém quer um relatório a dizer que esteve catorze horas
+   * offline durante a noite.
+   *
+   * Mostrá-lo a dizer "just now" para sempre era pior do que não o
+   * mostrar.
+   *
+   * O LUNCH entrou. É um estado a sério e faltava aqui — um agente
+   * que almoçou uma hora não via essa hora em lado nenhum.
    */
-  ['live', 'break', 'offline'].forEach(function (chave) {
+  ['live', 'break', 'lunch'].forEach(function (chave) {
     var st = estadoInfo(chave);
     partes.push(bloco(st.label, duracao(vivo[chave] || 0),
       chave === desk.state, st.color));
   });
 
   STATES.forEach(function (st) {
-    if (['live', 'break', 'offline'].indexOf(st.key) !== -1) return;
+    if (['live', 'break', 'lunch', 'offline'].indexOf(st.key) !== -1) return;
     if (!vivo[st.key]) return;
     partes.push(bloco(st.label, duracao(vivo[st.key]),
       st.key === desk.state, st.color));
@@ -4223,11 +4269,41 @@ async function setDeskState(state, aRetomar, desdeQuando) {
      *
      * Nada mudou no ecrã, por isso não há nada a repor.
      */
-    var titulo = /open|conversation/i.test(e.message)
-      ? 'You still have chats open'
-      : 'Could not change your status';
+    /**
+     * Dizer QUAIS, não só que há.
+     *
+     * "Ainda tens conversas abertas" obriga o agente a ir procurar
+     * quais. Listá-las poupa esse passo — e a vista Mine abre-se
+     * sozinha, que é onde ele tem de ir.
+     */
+    if (/open|conversation|chat/i.test(e.message)) {
+      var meus = (desk.chats || []).filter(function (c) {
+        return c.assigned_to === adminId() && c.status === 'open';
+      });
 
-    await avisar(titulo, e.message);
+      var lista = meus.slice(0, 5).map(function (c) {
+        return '· ' + (quemE(c) || 'conversation');
+      }).join('\n');
+
+      await avisar('Close your chats first',
+        'You cannot go offline with ' + meus.length +
+        (meus.length === 1 ? ' conversation open.' : ' conversations open.') +
+        '\n\n' + lista +
+        (meus.length > 5 ? '\n· and ' + (meus.length - 5) + ' more' : '') +
+        '\n\nClose them, or hand them to somebody else.');
+
+      // E leva-o para onde elas estão.
+      vistaAtual = 'mine';
+      qsa('[data-qview]').forEach(function (x) {
+        x.classList.toggle('on', x.getAttribute('data-qview') === 'mine');
+      });
+
+      switchTab('chatTab');
+      renderDesk();
+      return;
+    }
+
+    await avisar('Could not change your status', e.message);
     return;
   }
 

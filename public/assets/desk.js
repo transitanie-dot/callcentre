@@ -854,7 +854,9 @@ var desk = {
    * botões de estado desativados.
    */
   var pintar = function () {
-    if (deskDisplayName && el('deskNameText')) paintDisplayName();
+    // O nome vive agora no menu do avatar, que o pintarDuty
+    // desenha. Não há campo separado para verificar.
+    if (deskDisplayName) paintDisplayName();
     document.body.setAttribute('data-duty', 'unknown');
   };
 

@@ -537,6 +537,26 @@
         </div>
       </div>
 
+      <!-- ============ O PERFIL COMPLETO ============
+           Tudo o que o parceiro submeteu, numa folha. Estava na
+           base e ninguém o via — um supervisor que decide aprovar
+           ou rejeitar precisa de ver o que está a aprovar. -->
+      <div class="pf-back" id="pfBack" hidden>
+        <div class="pf-sheet">
+          <div class="pf-head">
+            <button class="pf-x" id="pfClose" type="button" aria-label="Close">&times;</button>
+            <h2 id="pfName">Partner</h2>
+            <p class="sub" id="pfSub"></p>
+          </div>
+
+          <div class="pf-body" id="pfBody"></div>
+
+          <!-- As decisões ficam sempre à vista, mesmo com a folha
+               a meio: é o que se veio cá fazer. -->
+          <div class="pf-acts" id="pfActs"></div>
+        </div>
+      </div>
+
       <div class="search-section">
         <h2>Driver partner applications</h2>
         <div class="search-grid">
@@ -688,25 +708,41 @@
            Estavam dentro de uma lista escondida, onde ninguém as
            encontrava. São a coisa mais usada do painel: quem está
            à espera, quem já tem alguém, e o que é meu. -->
+      <!-- ============ AS VISTAS DA FILA ============
+           Uma coluna à esquerda, com o que é meu em cima e tudo em
+           baixo. O que está à espera fica ao centro, que é onde o
+           olhar cai primeiro.
+
+           Antes eram cinco botões numa linha, e o "Mine" — a vista
+           mais usada — competia por espaço com o "Search all". -->
       <div class="q-views" id="qViews">
-        <!-- As minhas primeiro.
-             É a vista que o agente olha ao chegar e entre
-             conversas — estava em terceiro, depois de duas que só
-             interessam quando se procura trabalho novo. -->
-        <button class="q-view on primary" data-qview="mine" type="button">
-          Mine <span class="q-n" id="qnMine">0</span>
-        </button>
-        <button class="q-view primary" data-qview="waiting" type="button">
+        <div class="q-side">
+          <button class="q-view on" data-qview="mine" type="button">
+            Mine <span class="q-n" id="qnMine">0</span>
+          </button>
+          <button class="q-view" data-qview="all" type="button">
+            All <span class="q-n" id="qnAll">0</span>
+          </button>
+        </div>
+
+        <!-- O centro: quem espera por alguém. É a única vista onde
+             esperar custa, e por isso é a que grita. -->
+        <button class="q-view q-mid" data-qview="waiting" type="button">
           Waiting <span class="q-n" id="qnWaiting">0</span>
         </button>
-        <button class="q-view" data-qview="taken" type="button">
-          With an agent <span class="q-n" id="qnTaken">0</span>
-        </button>
-        <button class="q-view" data-qview="closed" type="button">Closed</button>
+
+        <div class="q-side">
+          <button class="q-view" data-qview="taken" type="button">
+            With an agent <span class="q-n" id="qnTaken">0</span>
+          </button>
+          <button class="q-view" data-qview="closed" type="button">
+            Closed
+          </button>
+        </div>
 
         <!-- Procurar em todos, incluindo os fechados de outros
              agentes e de meses anteriores. -->
-        <button class="q-view" id="tkToggle" type="button">Search all</button>
+        <button class="q-view q-search" id="tkToggle" type="button">Search all</button>
       </div>
 
       <div class="desk-search">

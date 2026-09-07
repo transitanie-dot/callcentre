@@ -251,13 +251,33 @@ function showConvNote(text, isError) {
 
 async function openAttachment(att) {
   var path = att.file_path;
+
   if (!path && att.file_url) {
     var marker = '/' + STORAGE_BUCKET + '/';
     if (att.file_url.indexOf(marker) !== -1) path = att.file_url.split(marker)[1].split('?')[0];
   }
+
   if (!path) return avisar('Heads up', 'This attachment has no stored path.');
 
   path = decodeURIComponent(path);
+
+  /**
+   * O nome do bucket, quando vem repetido no caminho.
+   *
+   * Uns caminhos foram guardados como "abc/foto.jpg" e outros como
+   * "support-files/abc/foto.jpg" — depende de quem os escreveu.
+   *
+   * O segundo faz o Supabase procurar
+   * "support-files/support-files/abc/foto.jpg" e devolver 404. Uma
+   * linha aqui evita ir corrigir dados antigos.
+   */
+  // As barras à frente primeiro, senão o teste do bucket falha em
+  // "/support-files/abc/foto.jpg".
+  path = path.replace(/^\/+/, '');
+
+  if (path.indexOf(STORAGE_BUCKET + '/') === 0) {
+    path = path.slice(STORAGE_BUCKET.length + 1);
+  }
   var res = await client.storage.from(STORAGE_BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
   if (res.error || !res.data) {
     console.error('signed url error:', res.error, '| path:', path);
@@ -1286,12 +1306,46 @@ function agoLabel(minutes) {
  * recebo" ou "porque não tenho viagens" exigia sair da conversa,
  * procurar, e voltar — e o parceiro fica à espera todo esse tempo.
  */
+/**
+ * A fonte de uma conversa aberta.
+ *
+ * A aba ativa não serve: uma conversa vinda da pesquisa pode ser de
+ * outro público, e uma aberta da conta de um cliente também.
+ *
+ * A conversa em si sabe o que é — tem audience quando vem da
+ * support_chats, e partner_id quando vem da outra.
+ */
+function fonteDoChat(chatId) {
+  var c = (desk.chats || []).find(function (x) { return x.chat_id === chatId; });
+
+  if (!c) {
+    // Sem a conversa carregada, a aba é o melhor palpite.
+    return (audAtual === 'customers' || audAtual === 'agents') ? 'support' : 'partner';
+  }
+
+  if (c.partner_id) return 'partner';
+  if (c.audience) return 'support';
+
+  return (audAtual === 'customers' || audAtual === 'agents') ? 'support' : 'partner';
+}
+
 async function renderChatCtx(chatId) {
   var box = el('chatCtx');
   box.innerHTML = '<div class="ctx-h">Loading</div>';
 
   try {
-    var data = await deskFetch('/api/admin/chat/' + encodeURIComponent(chatId) + '/context');
+    /**
+     * O contexto de um cliente não é o de um parceiro.
+     *
+     * Pedia sempre a rota dos parceiros, e nas conversas de cliente
+     * devolvia 404 — o id não existe na driver_partners.
+     */
+    var apoio = fonteDoChat(chatId) === 'support';
+
+    var data = await deskFetch(
+      (apoio ? '/api/admin/support-chat/' : '/api/admin/chat/') +
+      encodeURIComponent(chatId) + '/context');
+
     var c = data.context;
 
     if (!c) { box.innerHTML = '<div class="ctx-h">No details</div>'; return; }
@@ -1304,6 +1358,87 @@ async function renderChatCtx(chatId) {
       : (c.docs_expired
           ? '<span class="bad">' + c.docs_expired + ' expired</span>'
           : '<span class="ok">' + c.docs_approved + ' approved</span>');
+
+    /**
+     * Um cliente não tem documentos nem zonas.
+     *
+     * O desenho era sempre de parceiro — estado da empresa, país,
+     * documentos, viagens feitas. Numa conversa de cliente isso vem
+     * tudo vazio, e o agente vê uma coluna de traços.
+     *
+     * O que interessa de um cliente é outro: quantas reservas fez,
+     * quanto gastou, e qual é a próxima viagem.
+     */
+    if (apoio) {
+      var reservas = c.bookings || [];
+
+      box.innerHTML =
+        '<div class="ctx-big"><div class="k">Spent with us</div>' +
+        '<div class="v">' + escapeHtml(money(c.spent)) + '</div></div>' +
+
+        '<div class="ctx-h">' +
+        escapeHtml(c.audience === 'agency' ? 'Agency' : 'Customer') + '</div>' +
+
+        '<div class="ctx-row"><span>Name</span><span>' +
+          escapeHtml(c.name || '—') + '</span></div>' +
+
+        '<div class="ctx-row"><span>Email</span>' +
+          '<button class="ctx-copy" data-copy="' + escapeHtml(c.email || '') +
+          '">' + escapeHtml(c.email || '—') + '</button></div>' +
+
+        (c.phone
+          ? '<div class="ctx-row"><span>Phone</span>' +
+            '<button class="ctx-copy" data-copy="' + escapeHtml(c.phone) +
+            '">' + escapeHtml(c.phone) + '</button></div>'
+          : '') +
+
+        '<div class="ctx-row"><span>Since</span><span>' +
+          escapeHtml(since) + '</span></div>' +
+
+        (c.agency_status
+          ? '<div class="ctx-row"><span>Status</span><span class="' +
+            (c.agency_status === 'approved' ? 'ok' : 'bad') + '">' +
+            escapeHtml(c.agency_status) + '</span></div>'
+          : '') +
+
+        (c.commission != null
+          ? '<div class="ctx-row"><span>Commission</span><span>' +
+            escapeHtml(String(c.commission)) + '%</span></div>'
+          : '') +
+
+        /**
+         * As reservas, com a mais recente primeiro.
+         *
+         * É por elas que a conversa costuma ser — e sem isto o
+         * agente tinha de as ir procurar noutro separador com o
+         * cliente à espera.
+         */
+        (reservas.length
+          ? '<div class="ctx-h">Bookings</div>' +
+            reservas.slice(0, 5).map(function (b) {
+              return '<div class="ctx-row"><span>' +
+                escapeHtml(String(b.booking_date || '').slice(0, 10)) + '</span>' +
+                '<span>' + escapeHtml((b.pickup || '').split(',')[0]) +
+                ' &rarr; ' + escapeHtml((b.dropoff || '').split(',')[0]) +
+                '</span></div>';
+            }).join('')
+          : '<div class="ctx-h">Bookings</div>' +
+            '<div class="ctx-row"><span>None yet</span><span></span></div>');
+
+      // O mesmo padrão do desenho de parceiro: copiar com um
+      // clique em vez de obrigar a transcrever.
+      qsa('#chatCtx [data-copy]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var original = b.textContent;
+          navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function () {
+            b.textContent = 'Copied';
+            setTimeout(function () { b.textContent = original; }, 1200);
+          }).catch(function () {});
+        });
+      });
+
+      return;
+    }
 
     box.innerHTML =
       '<div class="ctx-big"><div class="k">Owed to them</div>' +

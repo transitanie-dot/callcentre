@@ -1682,3 +1682,12 @@ tr.clickable td:first-child strong{color:var(--primary)}
    são consulta. */
 .q-view.primary{border-color:var(--muted)}
 .q-view.primary:not(.on){color:var(--text)}
+
+/* As linhas do contexto que se clicam.
+   Um agente que veja uma viagem e queira o detalhe tinha de a ir
+   procurar noutro separador, com o cliente ao telefone. */
+.ctx-link{width:100%;text-align:left;background:transparent;
+  border:none;font-family:inherit;font-size:inherit;color:inherit;
+  cursor:pointer;padding:6px 0}
+.ctx-link:hover{background:var(--card-2)}
+.ctx-link span:last-child{color:var(--text)}

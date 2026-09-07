@@ -3515,9 +3515,15 @@ function pintarDuty() {
      * coisas da mesma pessoa em dois cantos do ecrã. Aqui estão
      * onde já se vai para trocar a fotografia.
      */
+    /**
+     * Só o nome.
+     *
+     * A foto já tem a sua secção no menu, com a imagem atual e os
+     * botões de trocar e remover. Um segundo botão a fazer o mesmo
+     * era ruído — e obrigava a pensar qual dos dois usar.
+     */
     '<div class="duty-edit">' +
       '<button type="button" data-edit-name>Change name</button>' +
-      '<button type="button" data-edit-photo>Change photo</button>' +
     '</div>' +
     '</div>';
 
@@ -3590,13 +3596,6 @@ function pintarDuty() {
       e.stopPropagation();
       fecharDuty();
       editarNome();
-    });
-  });
-
-  qsa('[data-edit-photo]').forEach(function (b) {
-    b.addEventListener('click', function (e) {
-      e.stopPropagation();
-      el('avatarFile').click();
     });
   });
 
@@ -3744,6 +3743,16 @@ var meuCargo = 'agent';
 var souSupervisor = false;
 var meuCargo = 'agent';
 
+/**
+ * O tempo num estado, em minutos.
+ *
+ * Mostrava segundos no primeiro minuto — "34s" — e isso fazia o
+ * número mudar a cada segundo sem dizer nada de novo. Ninguém
+ * decide nada com base em trinta e quatro segundos.
+ *
+ * Abaixo de um minuto diz "just now". Daí para cima, minutos e
+ * horas, que é a granularidade a que se pensa num turno.
+ */
 function duracao(seg) {
   var s = Math.max(0, Math.round(seg));
   var h = Math.floor(s / 3600);
@@ -3751,7 +3760,7 @@ function duracao(seg) {
 
   if (h > 0) return h + 'h' + String(m).padStart(2, '0');
   if (m > 0) return m + 'm';
-  return s + 's';
+  return 'just now';
 }
 
 /**
@@ -3971,12 +3980,27 @@ function arrancarDia() {
   if (diaTimer) clearInterval(diaTimer);
   // De dez em dez segundos chega: os números são em minutos, e um
   // intervalo por segundo só gastaria bateria.
+  /**
+   * De minuto a minuto, não de dez em dez segundos.
+   *
+   * O número mostra minutos: atualizá-lo seis vezes por minuto
+   * redesenha o mesmo texto cinco vezes por nada.
+   */
+  /**
+   * De minuto a minuto.
+   *
+   * O número mostra minutos — redesenhá-lo de dez em dez segundos
+   * é escrever o mesmo texto seis vezes por nada.
+   *
+   * E o menu de estado fecha-se sozinho quando é redesenhado a
+   * meio de um clique, o que com dez segundos acontecia.
+   */
   diaTimer = setInterval(function () {
     pintarDia();
     // O botão também: sem isto o tempo lá ficava parado no valor
     // que tinha quando o estado mudou.
     pintarDuty();
-  }, 10000);
+  }, 60000);
 }
 
 // ============================================================

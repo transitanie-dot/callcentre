@@ -1676,3 +1676,9 @@
 tr.clickable{cursor:pointer}
 tr.clickable:hover{background:var(--card-2)}
 tr.clickable td:first-child strong{color:var(--primary)}
+
+/* As duas vistas que importam mais têm mais peso.
+   "Mine" e "Waiting" são o trabalho; "With an agent" e "Closed"
+   são consulta. */
+.q-view.primary{border-color:var(--muted)}
+.q-view.primary:not(.on){color:var(--text)}

@@ -1867,3 +1867,11 @@ html[data-theme="dark"] .aud-pill.agency{color:#C084FC}
   .pf-item{flex-wrap:wrap}
   .pf-item b{min-width:0;width:100%}
 }
+
+/* O follow-up já existia no painel, com o nome "follow-up" e cor
+   própria. O que eu acrescentei era um segundo estado com o mesmo
+   propósito e outro nome — removido.
+
+   O que faltava não era o estado: era ele entrar sozinho ao fechar
+   uma conversa, e sair ao fim de trinta minutos. Isso está no SQL.
+*/

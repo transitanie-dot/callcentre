@@ -720,9 +720,15 @@
         <div class="tk-filters">
           <input type="text" id="tkQuery" class="search-input"
                  placeholder="Name, email, ticket, or something that was said">
+          <!-- Os estados a sério, não só dois grupos.
+               A partner_chats fecha com 'closed', a support_chats
+               com 'resolved', e há o 'pending' que não é nem uma
+               coisa nem outra. -->
           <select id="tkStatus" class="search-input">
             <option value="all">Any status</option>
             <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
             <option value="closed">Closed</option>
           </select>
           <input type="date" id="tkFrom" class="search-input" title="From">

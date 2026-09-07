@@ -6266,6 +6266,166 @@ function docLabel(p, code) {
 }
 
 // ============================================================
+// PAGAMENTOS AOS PARCEIROS
+//
+// Os extratos existiam e a transferência era à mão, sem registo
+// nenhum. Se um parceiro dissesse que não recebeu, não havia como
+// confirmar.
+// ============================================================
+
+async function carregarPagamentos() {
+  var lista = el('poList');
+  if (!lista || lista.__missing) return;
+
+  try {
+    var r = await deskFetch('/api/admin/payouts');
+    pintarPagamentos(r.payouts || [], r.summary || {});
+  } catch (e) {
+    lista.innerHTML = '<div class="error-row">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function pintarPagamentos(linhas, resumo) {
+  var topo = el('poSummary');
+
+  topo.innerHTML =
+    '<span class="cov-pill' + (resumo.due_amount > 0 ? ' warn' : '') + '">' +
+      '<b>' + Number(resumo.due_amount || 0).toFixed(0) + '</b>' +
+      '<span>EUR owed</span></span>' +
+
+    '<span class="cov-pill"><b>' + (resumo.pending || 0) + '</b>' +
+      '<span>to pay</span></span>' +
+
+    /**
+     * Sem IBAN não se paga.
+     *
+     * E é melhor sabê-lo antes de abrir o banco do que a meio da
+     * transferência.
+     */
+    (resumo.missing_iban > 0
+      ? '<span class="cov-pill bad"><b>' + resumo.missing_iban + '</b>' +
+        '<span>missing IBAN</span></span>'
+      : '');
+
+  var lista = el('poList');
+
+  if (!linhas.length) {
+    lista.innerHTML = '<div class="no-results">Nothing to pay right now.<br>' +
+      '<span style="color:var(--muted);font-size:13px">Close a month to ' +
+      'group the rides into payouts.</span></div>';
+    return;
+  }
+
+  lista.innerHTML =
+    '<div class="cov-row cov-head">' +
+      '<span>Partner</span><span>Rides</span><span>Extras</span>' +
+      '<span>Total</span><span>Status</span>' +
+    '</div>' +
+
+    linhas.map(function (p) {
+      var mes = String(p.period_start || '').slice(0, 7);
+
+      return '<div class="cov-row">' +
+        '<span class="cov-name"><b>' +
+          escapeHtml(p.trading_name || p.legal_name || '—') + '</b>' +
+          '<small>' + escapeHtml(mes) +
+          (p.missing_iban
+            ? ' &middot; <span class="bad">no IBAN</span>'
+            : (p.payout_iban ? ' &middot; ' + escapeHtml(p.payout_iban) : '')) +
+          '</small></span>' +
+
+        '<span class="cov-n">' + (p.rides_count || 0) + '</span>' +
+        '<span class="cov-n">' +
+          (p.extras_total > 0 ? Number(p.extras_total).toFixed(0) : '—') + '</span>' +
+
+        '<span class="cov-n" style="font-weight:600;color:var(--text)">' +
+          Number(p.amount || 0).toFixed(2) + '</span>' +
+
+        (p.status === 'paid'
+          ? '<span class="cov-state ok">paid</span>'
+          : '<button class="btn teal sm" data-pay="' + escapeHtml(p.id) +
+            '" type="button"' + (p.missing_iban ? ' disabled' : '') +
+            '>Mark paid</button>') +
+      '</div>';
+    }).join('');
+
+  qsa('[data-pay]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      marcarPago(b.getAttribute('data-pay'), b);
+    });
+  });
+}
+
+/**
+ * Marcar como pago, com a referência da transferência.
+ *
+ * A referência é o que permite conciliar: sem ela, "pago" é uma
+ * afirmação nossa sem nada por trás.
+ */
+async function marcarPago(id, botao) {
+  var ref = prompt(
+    'Bank reference for this transfer?\n\n' +
+    'It is what lets us match this to the statement later.'
+  );
+
+  if (ref === null) return;
+
+  botao.disabled = true;
+  botao.textContent = 'Saving...';
+
+  try {
+    await deskFetch('/api/admin/payouts/paid', {
+      payout_id: id,
+      reference: ref.trim() || null
+    });
+
+    carregarPagamentos();
+  } catch (e) {
+    botao.disabled = false;
+    botao.textContent = 'Mark paid';
+    avisar('Could not save', e.message);
+  }
+}
+
+/**
+ * Fechar o mês.
+ *
+ * Junta as viagens feitas e os extras numa linha por parceiro.
+ * Feito no início do mês seguinte, com o pagamento entre os dias 8
+ * e 12 — e por boa razão: uma disputa do Stripe aparece dias
+ * depois da viagem, e pagar no dia seguinte é pagar antes de saber
+ * se o dinheiro é nosso.
+ */
+(function () {
+  var b = el('poCloseMonth');
+  if (!b || b.__missing) return;
+
+  b.addEventListener('click', async function () {
+    if (!await perguntar('Close last month?',
+        'This groups every completed ride and extra into one payout line ' +
+        'per partner. Lines already marked paid are left alone.')) return;
+
+    b.disabled = true;
+    b.textContent = 'Closing...';
+
+    try {
+      var r = await deskFetch('/api/admin/payouts/close', {});
+
+      avisar('Month closed',
+        r.partners + ' partner' + (r.partners === 1 ? '' : 's') +
+        ' for ' + r.period_start + ' to ' + r.period_end + '.');
+
+      carregarPagamentos();
+    } catch (e) {
+      avisar('Could not close', e.message);
+    } finally {
+      b.disabled = false;
+      b.textContent = 'Close last month';
+    }
+  });
+})();
+
+// ============================================================
 // O MAPA DE COBERTURA
 //
 // A peça que ninguém pede e que mais vale.
@@ -7188,7 +7348,10 @@ function switchTab(name) {
 
   // A cobertura carrega-se ao abrir, não no arranque: são 200
   // zonas e ninguém olha para elas todos os dias.
-  if (name === 'partnersTab') carregarCobertura();
+  if (name === 'partnersTab') {
+    carregarCobertura();
+    carregarPagamentos();
+  }
 
   if (name === 'chatTab') {
     if (chatAlert) { clearInterval(chatAlert); chatAlert = null; }

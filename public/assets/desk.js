@@ -6430,6 +6430,111 @@ async function verAlteracoes(bookingId) {
 }
 
 // ============================================================
+// PROCURAR UM TICKET
+//
+// A fila mostra o que está aberto. Um ticket resolvido desaparecia
+// do painel — e um cliente com três conversas anteriores não tinha
+// histórico nenhum aos olhos do agente.
+// ============================================================
+
+(function () {
+  var b = el('tkToggle');
+  if (!b || b.__missing) return;
+
+  b.addEventListener('click', function () {
+    var caixa = el('tkSearch');
+    caixa.hidden = !caixa.hidden;
+    b.classList.toggle('on', !caixa.hidden);
+
+    if (!caixa.hidden) el('tkQuery').focus();
+  });
+
+  el('tkGo').addEventListener('click', procurarTickets);
+
+  // Enter procura: um campo de pesquisa que obriga a carregar num
+  // botão é um campo que se usa metade das vezes.
+  el('tkQuery').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') procurarTickets();
+  });
+})();
+
+async function procurarTickets() {
+  var caixa = el('tkResults');
+  caixa.innerHTML = '<div class="loading-row">Searching...</div>';
+
+  var q = new URLSearchParams({
+    q: el('tkQuery').value.trim(),
+    status: el('tkStatus').value,
+    audience: audAtual === 'drivers' ? 'drivers'
+      : audAtual === 'agents' ? 'agency'
+      : audAtual === 'customers' ? 'customer' : 'all'
+  });
+
+  if (el('tkFrom').value) q.set('from', el('tkFrom').value);
+  if (el('tkTo').value) q.set('to', el('tkTo').value);
+
+  try {
+    var r = await deskFetch('/api/admin/tickets?' + q.toString());
+    pintarTickets(r.tickets || []);
+  } catch (e) {
+    caixa.innerHTML = '<div class="error-row">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function pintarTickets(lista) {
+  var caixa = el('tkResults');
+
+  if (!lista.length) {
+    caixa.innerHTML = '<div class="no-results">Nothing found.</div>';
+    return;
+  }
+
+  caixa.innerHTML = lista.map(function (t) {
+    var quando = new Date(t.created_at).toLocaleDateString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
+
+    return '<button class="tk-row" data-ticket="' + escapeHtml(t.chat_id) +
+      '" data-source="' + escapeHtml(t.source) + '" type="button">' +
+
+      '<div class="tk-top">' +
+        '<b>' + escapeHtml(t.who || t.email || '—') + '</b>' +
+        '<span class="tk-state ' + (t.status === 'open' ? 'open' : 'closed') + '">' +
+          escapeHtml(t.status) + '</span>' +
+      '</div>' +
+
+      '<div class="tk-snip">' +
+        escapeHtml((t.last_message || t.subject || 'No messages').slice(0, 110)) +
+      '</div>' +
+
+      '<div class="tk-meta">' +
+        escapeHtml(quando) + ' &middot; ' +
+        escapeHtml(String(t.messages || 0)) + ' messages' +
+        (t.agent_name ? ' &middot; ' + escapeHtml(t.agent_name) : '') +
+        (t.ticket ? ' &middot; ' + escapeHtml(t.ticket) : '') +
+        (t.resolution
+          ? '<br><span class="tk-res">' + escapeHtml(t.resolution.slice(0, 90)) + '</span>'
+          : '') +
+      '</div>' +
+
+      '</button>';
+  }).join('');
+
+  qsa('[data-ticket]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      /**
+       * Abrir um ticket fechado.
+       *
+       * Só para ler: o openDeskChat trata de o mostrar, e um chat
+       * fechado não aceita mensagens novas. Quem quiser continuar a
+       * conversa reabre-a pelo botão próprio.
+       */
+      openDeskChat(b.getAttribute('data-ticket'));
+    });
+  });
+}
+
+// ============================================================
 // PAGAMENTOS AOS PARCEIROS
 //
 // Os extratos existiam e a transferência era à mão, sem registo

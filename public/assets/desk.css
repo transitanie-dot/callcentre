@@ -1600,3 +1600,52 @@
 #detailExtra .ok{color:var(--ok);font-weight:600}
 #detailExtra .bad, #detailNoShow .bad{color:var(--bad);font-weight:600}
 #detailExtra .warn{color:var(--warn);font-weight:600}
+
+/* ============================================================
+   PROCURAR UM TICKET
+
+   A fila mostra o que está aberto. Um ticket resolvido
+   desaparecia do painel — e um cliente com três conversas
+   anteriores não tinha histórico nenhum aos olhos do agente.
+   ============================================================ */
+.tk-search{padding:0 20px 14px}
+.tk-search[hidden]{display:none!important}
+
+.tk-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tk-filters #tkQuery{flex:1 1 240px;min-width:180px}
+.tk-filters select, .tk-filters input[type="date"]{flex:0 0 auto}
+
+.tk-results{display:flex;flex-direction:column;gap:1px;
+  max-height:420px;overflow-y:auto;
+  border:1px solid var(--border);border-radius:14px}
+.tk-results:empty{display:none}
+
+.tk-row{display:block;width:100%;text-align:left;padding:12px 15px;
+  background:var(--card);border:none;cursor:pointer;
+  font-family:inherit;color:var(--text)}
+.tk-row + .tk-row{border-top:1px solid var(--border-soft)}
+.tk-row:hover{background:var(--card-2)}
+
+.tk-top{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:3px}
+.tk-top b{font-size:14px;font-weight:600}
+
+.tk-state{font-family:var(--mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;
+  border-radius:999px;white-space:nowrap}
+.tk-state.open{background:var(--ok-bg);color:var(--ok)}
+.tk-state.closed{background:var(--card-2);color:var(--muted)}
+
+.tk-snip{font-size:13px;color:var(--muted);margin-bottom:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.tk-meta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* A resolução, quando lá está. É o que diz ao agente como o caso
+   acabou sem ter de abrir a conversa. */
+.tk-res{color:var(--ok);font-family:var(--sans, inherit);font-size:12px}
+
+@media (max-width:700px){
+  .tk-search{padding:0 12px 12px}
+  .tk-filters input[type="date"]{flex:1 1 45%}
+}

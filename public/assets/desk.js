@@ -139,6 +139,26 @@ function bookingWhen(b) {
   var t = b.booking_time ? String(b.booking_time).slice(0, 5) : '';
   return t ? ((b.booking_date || 'N/A') + ' \u00b7 ' + t) : (b.booking_date || 'N/A');
 }
+/**
+ * A perna, quando há duas.
+ *
+ * Uma ida e volta são duas reservas com a mesma referência e as
+ * moradas invertidas. Sem uma marca, quem olha para a lista tem de
+ * ler as moradas para saber qual é qual.
+ *
+ * Nas de sentido único não aparece nada: uma marca que está sempre
+ * lá não distingue nada.
+ */
+function etiquetaPerna(b) {
+  if (b.leg === 2) return '<span class="leg ret">return</span>';
+
+  if (b.paired_booking_id || b.trip_group_id) {
+    return '<span class="leg out">out</span>';
+  }
+
+  return '';
+}
+
 function bookingRef(b) { return b.booking_id || b.booking_reference || String(b.id || '').slice(0, 8); }
 
 var currentAdmin = null;
@@ -194,7 +214,7 @@ var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
 var adminChatsChannel = null, adminMessagesChannel = null, adminSelectedFile = null;
 
-var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at, extra_amount, extra_minutes, extra_accepted_at, extra_charged_at, extra_charge_failed, no_show_at, no_show_photo, no_show_note, changed_count, last_changed_at, driver_payout, pickup_type, flight_landed_at, free_until'
+var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at, extra_amount, extra_minutes, extra_accepted_at, extra_charged_at, extra_charge_failed, no_show_at, no_show_photo, no_show_note, changed_count, last_changed_at, driver_payout, pickup_type, flight_landed_at, free_until, leg, paired_booking_id, trip_group_id'
 var activeBooking = null;
 
 // ============================================================
@@ -846,6 +866,38 @@ function openDetails(id) {
       qsa('[data-changes]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           verAlteracoes(btn.getAttribute('data-changes'));
+        });
+      });
+    }
+  }
+
+  /**
+   * A outra perna da viagem.
+   *
+   * Um agente ao telefone com um cliente que tem ida e volta
+   * precisa de saltar entre as duas. Sem isto, procura a
+   * referência à mão na lista.
+   */
+  var parWrap = el('detailPairWrap');
+
+  if (parWrap && !parWrap.__missing) {
+    var temPar = b.paired_booking_id || (b.trip_group_id && b.leg);
+
+    parWrap.hidden = !temPar;
+
+    if (temPar) {
+      el('detailPair').innerHTML =
+        '<span>' + (b.leg === 2 ? 'This is the return leg'
+          : 'This is the outbound leg') + '</span>' +
+        (b.paired_booking_id
+          ? ' <button class="btn line sm" data-open-pair="' +
+            escapeHtml(b.paired_booking_id) + '" type="button">' +
+            (b.leg === 2 ? 'See the outbound' : 'See the return') + '</button>'
+          : '');
+
+      qsa('[data-open-pair]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          openDetails(btn.getAttribute('data-open-pair'));
         });
       });
     }
@@ -5445,7 +5497,8 @@ async function loadAccountBookings(email) {
      * cliente à espera ao telefone.
      */
     return '<tr class="clickable" data-open-booking="' + escapeHtml(b.id) +
-      '"><td><strong>' + escapeHtml(bookingRef(b)) + '</strong></td>' +
+      '"><td><strong>' + escapeHtml(bookingRef(b)) + '</strong>' +
+      etiquetaPerna(b) + '</td>' +
       '<td>' + escapeHtml(b.pickup || 'N/A') + ' &rarr; ' + escapeHtml(b.dropoff || 'N/A') + '</td>' +
       '<td>' + escapeHtml(bookingWhen(b)) + '</td>' +
       '<td>' + escapeHtml(money(b.currency, b.price)) + '</td>' +
@@ -7268,6 +7321,224 @@ async function marcarPago(id, botao) {
 })();
 
 // ============================================================
+// O MAPA DO MUNDO
+//
+// Uma lista diz quantos parceiros há em cada zona. O mapa mostra
+// que os buracos são geográficos — uma região inteira sem ninguém,
+// e não uma zona isolada.
+//
+// Sem bibliotecas: uma projeção de Mercator cabe em cinco linhas,
+// e um mapa de pontos não precisa de mais. Uma biblioteca de mapas
+// são 200 KB para desenhar sessenta círculos.
+// ============================================================
+
+var cobertura = [];
+var cmFiltro = 'all';
+
+/**
+ * Latitude e longitude para píxeis.
+ *
+ * Mercator, cortado nos 60º norte e 50º sul — acima e abaixo disso
+ * não há aeroportos nossos, e incluir a Gronelândia esmagaria a
+ * Europa a um quarto do tamanho.
+ */
+function projetar(lat, lng, largura, altura) {
+  var x = (Number(lng) + 180) / 360 * largura;
+
+  var radianos = Number(lat) * Math.PI / 180;
+  var mercator = Math.log(Math.tan(Math.PI / 4 + radianos / 2));
+
+  // Os limites, na mesma escala.
+  var cima = Math.log(Math.tan(Math.PI / 4 + (72 * Math.PI / 180) / 2));
+  var baixo = Math.log(Math.tan(Math.PI / 4 + (-55 * Math.PI / 180) / 2));
+
+  var y = altura - ((mercator - baixo) / (cima - baixo)) * altura;
+
+  return { x: x, y: y };
+}
+
+async function carregarMapa() {
+  var svg = el('cmSvg');
+  if (!svg || svg.__missing) return;
+
+  try {
+    var r = await deskFetch('/api/admin/coverage-map');
+    cobertura = r.zones || [];
+    desenharMapa(r.summary || {});
+  } catch (e) {
+    el('cmList').innerHTML =
+      '<div class="error-row">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function desenharMapa(resumo) {
+  var svg = el('cmSvg');
+  var L = 1000, A = 500;
+
+  /**
+   * O contorno dos continentes, muito simplificado.
+   *
+   * Não é um mapa cartográfico — é um pano de fundo para os pontos
+   * se situarem. Uma pessoa reconhece a Europa e a América do Sul,
+   * e isso chega para saber onde está a olhar.
+   */
+  var mundo =
+    '<path class="cm-land" d="' +
+    // Europa e Norte de África
+    'M470,90 L520,80 L560,95 L575,130 L560,165 L520,180 L490,200 ' +
+    'L470,230 L440,250 L420,230 L430,190 L450,160 L455,120 Z ' +
+    // Ásia
+    'M575,95 L700,80 L800,100 L860,140 L880,190 L840,230 L780,240 ' +
+    'L720,215 L660,190 L600,160 L578,125 Z ' +
+    // África
+    'M470,235 L530,225 L570,250 L580,310 L555,370 L510,395 L475,370 ' +
+    'L455,310 L460,265 Z ' +
+    // América do Norte
+    'M120,80 L250,70 L310,100 L300,150 L260,190 L220,215 L190,255 ' +
+    'L165,230 L150,180 L120,140 Z ' +
+    // América do Sul
+    'M250,265 L305,255 L330,300 L320,370 L290,420 L265,395 L250,340 Z ' +
+    // Oceania
+    'M810,320 L880,315 L900,355 L865,390 L820,375 L805,345 Z' +
+    '"/>';
+
+  // Os pontos.
+  var pontos = cobertura.map(function (z) {
+    var p = projetar(z.lat, z.lng, L, A);
+
+    /**
+     * O tamanho diz a procura; a cor diz a cobertura.
+     *
+     * Um ponto grande e vermelho é onde se perde dinheiro. Um
+     * pequeno e vermelho é um problema teórico.
+     */
+    var raio = cmFiltro === 'demand'
+      ? Math.min(14, 4 + Math.sqrt(Number(z.bookings_90d || 0)) * 1.6)
+      : 5.5;
+
+    var estado = corDoPonto(z);
+
+    return '<circle class="cm-dot ' + estado + '" ' +
+      'cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" ' +
+      'r="' + raio.toFixed(1) + '" ' +
+      'data-iata="' + escapeHtml(z.iata) + '"><title>' +
+      escapeHtml(z.city + ' · ' + z.sedans + ' sedan, ' + z.vans + ' van') +
+      '</title></circle>';
+  }).join('');
+
+  svg.innerHTML = mundo + pontos;
+
+  // ---------- a legenda ----------
+  el('cmLegend').innerHTML =
+    '<span class="cm-key"><i class="full"></i>' +
+      (resumo.full || 0) + ' covered</span>' +
+    '<span class="cm-key"><i class="partial"></i>' +
+      (resumo.partial || 0) + ' partial</span>' +
+    '<span class="cm-key"><i class="none"></i>' +
+      (resumo.none || 0) + ' empty</span>' +
+    (resumo.demand_uncovered
+      ? '<span class="cm-demand">' + resumo.demand_uncovered +
+        ' bookings in 90 days where we are not covered</span>'
+      : '');
+
+  pintarListaCobertura();
+
+  // Clicar num ponto procura esse parceiro.
+  qsa('#cmSvg [data-iata]').forEach(function (c) {
+    c.addEventListener('click', function () {
+      var iata = c.getAttribute('data-iata');
+
+      el('ptZone').value = iata;
+      ptFilters.zone = iata;
+      renderPartners();
+
+      el('ptZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+}
+
+/**
+ * A cor de um ponto, conforme o filtro.
+ *
+ * No filtro "sedans" ou "vans", a cor diz só sobre essa classe —
+ * uma zona com quatro sedans e nenhuma van fica verde nos sedans e
+ * vermelha nas vans. É como se vê o que falta onde.
+ */
+function corDoPonto(z) {
+  if (cmFiltro === 'sedan') {
+    return z.sedans >= 2 ? 'full' : (z.sedans > 0 ? 'partial' : 'none');
+  }
+
+  if (cmFiltro === 'van') {
+    return z.vans >= 2 ? 'full' : (z.vans > 0 ? 'partial' : 'none');
+  }
+
+  return z.status || 'none';
+}
+
+/**
+ * A lista por baixo do mapa.
+ *
+ * Só o que precisa de atenção, e por procura: um mapa mostra onde,
+ * uma lista ordenada diz por onde começar.
+ */
+function pintarListaCobertura() {
+  var precisam = cobertura
+    .filter(function (z) { return corDoPonto(z) !== 'full'; })
+    .sort(function (a, b) {
+      return Number(b.bookings_90d || 0) - Number(a.bookings_90d || 0);
+    })
+    .slice(0, 12);
+
+  if (!precisam.length) {
+    el('cmList').innerHTML =
+      '<div class="no-results">Every zone is covered.</div>';
+    return;
+  }
+
+  el('cmList').innerHTML = precisam.map(function (z) {
+    return '<button class="cm-row" data-zone="' + escapeHtml(z.iata) + '">' +
+      '<span class="cm-dot-inline ' + corDoPonto(z) + '"></span>' +
+      '<b>' + escapeHtml(z.city || z.iata) + '</b>' +
+      '<span class="cm-cars">' + z.sedans + ' sedan · ' + z.vans + ' van</span>' +
+      (z.bookings_90d
+        ? '<span class="cm-dem">' + z.bookings_90d + ' bookings</span>'
+        : '<span class="cm-dem quiet">no demand</span>') +
+      '</button>';
+  }).join('');
+
+  qsa('#cmList [data-zone]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      el('ptZone').value = b.getAttribute('data-zone');
+      ptFilters.zone = b.getAttribute('data-zone');
+      renderPartners();
+    });
+  });
+}
+
+(function () {
+  qsa('[data-cmf]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      cmFiltro = b.getAttribute('data-cmf');
+
+      qsa('[data-cmf]').forEach(function (x) {
+        x.classList.toggle('on', x === b);
+      });
+
+      // Sem ir ao servidor: os dados já cá estão, muda-se a leitura.
+      desenharMapa({
+        full: cobertura.filter(function (z) { return corDoPonto(z) === 'full'; }).length,
+        partial: cobertura.filter(function (z) { return corDoPonto(z) === 'partial'; }).length,
+        none: cobertura.filter(function (z) { return corDoPonto(z) === 'none'; }).length,
+        demand_uncovered: cobertura
+          .filter(function (z) { return corDoPonto(z) !== 'full'; })
+          .reduce(function (t, z) { return t + Number(z.bookings_90d || 0); }, 0)
+      });
+    });
+  });
+})();
+
+// ============================================================
 // O MAPA DE COBERTURA
 //
 // A peça que ninguém pede e que mais vale.
@@ -8606,6 +8877,7 @@ function switchTab(name) {
   // A cobertura carrega-se ao abrir, não no arranque: são 200
   // zonas e ninguém olha para elas todos os dias.
   if (name === 'partnersTab') {
+    carregarMapa();
     carregarCobertura();
     carregarPagamentos();
   }

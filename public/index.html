@@ -733,35 +733,16 @@
 
            Antes eram cinco botões numa linha, e o "Mine" — a vista
            mais usada — competia por espaço com o "Search all". -->
-      <div class="q-views" id="qViews">
-        <div class="q-side">
-          <button class="q-view on" data-qview="mine" type="button">
-            Mine <span class="q-n" id="qnMine">0</span>
-          </button>
-          <button class="q-view" data-qview="all" type="button">
-            All <span class="q-n" id="qnAll">0</span>
-          </button>
-        </div>
+      <!-- ============ AS VISTAS ============
+           Desenhadas pelo JS, porque dependem da aba.
 
-        <!-- O centro: quem espera por alguém. É a única vista onde
-             esperar custa, e por isso é a que grita. -->
-        <button class="q-view q-mid" data-qview="waiting" type="button">
-          Waiting <span class="q-n" id="qnWaiting">0</span>
-        </button>
+           Eram cinco fixas para todas as abas — quinze
+           combinações, e a maioria sem sentido. "All" numa aba de
+           tickets a mostrar chats ao vivo era esse cruzamento a
+           falhar.
 
-        <div class="q-side">
-          <button class="q-view" data-qview="taken" type="button">
-            With an agent <span class="q-n" id="qnTaken">0</span>
-          </button>
-          <button class="q-view" data-qview="closed" type="button">
-            Closed
-          </button>
-        </div>
-
-        <!-- Procurar em todos, incluindo os fechados de outros
-             agentes e de meses anteriores. -->
-        <button class="q-view q-search" id="tkToggle" type="button">Search all</button>
-      </div>
+           Agora cada aba tem as suas. -->
+      <div class="q-views" id="qViews"></div>
 
       <div class="desk-search">
         <input type="text" id="deskSearch" class="search-input"

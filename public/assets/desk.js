@@ -2476,17 +2476,20 @@ function paintChatOwnership(chat) {
     el('chatJoinBtn').classList.add('hidden');
   } else {
     /**
-     * Já tem dono. Dizer QUEM, e dar duas saídas.
+     * Já tem dono: entra-se, não se tira.
      *
-     * O painel dizia "already taken" e pronto. Saber que é o Rick
-     * muda tudo: sabe-se a quem perguntar, e se ele está ali ao
-     * lado resolve-se numa frase.
+     * Dizer QUEM muda tudo — sabe-se a quem perguntar, e se ele
+     * está ali ao lado resolve-se numa frase.
+     *
+     * O botão de tirar desapareceu: arrancava a conversa a quem a
+     * estava a trabalhar, e ele perdia-a a meio de uma frase.
+     * Quem entra pode responder e resolver na mesma.
      */
     var quem = chat.assigned_agent_name || 'another agent';
 
-    el('chatClaimText').textContent = 'Session with ' + quem + '.';
-    el('chatTakeBtn').textContent = 'Take it over';
-    el('chatJoinBtn').classList.remove('hidden');
+    el('chatClaimText').textContent = quem + ' is on this one.';
+    el('chatTakeBtn').textContent = 'Join';
+    el('chatJoinBtn').classList.add('hidden');
   }
 
   el('chatTakeBtn').disabled = false;
@@ -2641,42 +2644,25 @@ function pintarQuemEsta(chat) {
   }).join('');
 }
 
+/**
+ * Pegar ou entrar. Nunca tirar.
+ *
+ * Havia um "Take over" que arrancava a conversa a quem a estava a
+ * trabalhar — e ele perdia-a a meio de uma frase.
+ *
+ * Agora quem quiser entrar entra, e todos os que lá estão podem
+ * responder e resolver. É o que dois agentes a trabalhar juntos
+ * precisam, e é uma decisão a menos.
+ */
 el('chatTakeBtn').addEventListener('click', async function () {
   if (!desk.current) return;
 
-  var chat = chatAtual();
-  // A fonte vem da conversa, não da aba: a fila é uma só.
-  var apoio = fonteDoChat(desk.current) === 'support';
-
-  // Livre: pega-se e passa a ser minha.
-  if (!chat.assigned_to) {
-    await pegarConversa(desk.current);
-    return;
-  }
-
-  /**
-   * Tem dono. Tomar conta tira-lha.
-   *
-   * Só faz sentido se ele saiu mesmo. Se está a trabalhar, o botão
-   * ao lado — "Join" — deixa entrar sem tirar nada a ninguém.
-   */
-  var quem = chat.assigned_agent_name || 'the other agent';
-
-  if (!await perguntar('Take it over',
-      'This moves the conversation from ' + quem + ' to you.\n\n' +
-      'They lose it from their list. If they are still working, use Join ' +
-      'instead — you can both be in it.')) return;
+  el('chatTakeBtn').disabled = true;
 
   try {
-    await deskFetch('/api/admin/chat/takeover', {
-      chat_id: desk.current,
-      kind: apoio ? 'support' : 'partner'
-    });
-
-    await loadDesk();
-    await openDeskChat(desk.current);
-  } catch (e) {
-    avisar('Could not take it over', e.message);
+    await pegarConversa(desk.current);
+  } finally {
+    el('chatTakeBtn').disabled = false;
   }
 });
 
@@ -3251,7 +3237,16 @@ var VISTAS = {
     // Os que esperam por nós. É a lista de trabalho.
     { k: 'todo', label: 'To answer', mid: true },
     { k: 'mine', label: 'Mine' },
-    { k: 'waitingcust', label: 'Waiting on customer' },
+
+    /**
+     * Respondidos, à espera do cliente.
+     *
+     * Ficam sete dias e resolvem-se sozinhos. A maioria dos
+     * clientes não volta a escrever, e alguém teria de os fechar
+     * um a um.
+     */
+    { k: 'pending', label: 'Waiting on customer' },
+
     { k: 'resolved', label: 'Resolved' }
   ],
 
@@ -3401,14 +3396,31 @@ function filtrarConversas(lista) {
      * à espera dele. Misturá-los fazia a lista parecer maior do que
      * era, e ensinava a ignorá-la.
      */
-    if (vistaAtual === 'todo') return !c.awaiting_customer;
-    if (vistaAtual === 'waitingcust') return Boolean(c.awaiting_customer);
+    /**
+     * "To answer": a bola está do nosso lado.
+     *
+     * Um pendente não entra: já foi respondido, e está à espera do
+     * cliente. Misturá-los fazia a lista parecer maior do que era.
+     */
+    if (vistaAtual === 'todo') {
+      return c.status !== 'pending' && !c.awaiting_customer;
+    }
+
+    if (vistaAtual === 'pending') return c.status === 'pending';
 
     // ---------- de-esc ----------
     if (vistaAtual === 'open') return true;
 
     // ---------- comum às três ----------
-    if (vistaAtual === 'mine') return c.assigned_to === adminId();
+    /**
+     * "Mine" é o que tenho para fazer.
+     *
+     * Um pendente meu está à espera do cliente — tê-lo aqui era
+     * ter na lista de trabalho o que não é trabalho.
+     */
+    if (vistaAtual === 'mine') {
+      return c.assigned_to === adminId() && c.status !== 'pending';
+    }
 
     /**
      * 'all' mostra tudo o que está aberto.
@@ -4713,40 +4725,49 @@ function pintarDia() {
       st.key === desk.state, st.color));
   });
 
-  // O que aconteceu, não só quanto tempo passou.
   /**
-   * O que se FEZ, primeiro.
+   * O que se FEZ, não o que se ofereceu.
    *
-   * O "Rang" e o "Answered" contam ofertas — dizem se o agente
-   * atende quando lhe toca. O "Resolved" conta conversas fechadas,
-   * que é o trabalho.
+   * As métricas contavam ofertas: quantas vezes tocou, quantas
+   * foram atendidas. Um agente que respondesse a quarenta tickets
+   * num dia tinha "0 resolved", porque nenhum era uma oferta.
    *
-   * Um agente que resolva dez conversas que já eram dele via zero
-   * em todo o lado.
+   * Agora contam trabalho: resolvidas, respondidas, mensagens
+   * escritas.
    */
-  partes.push(bloco('Resolved', m.resolved || 0));
-  partes.push(bloco('Rang', m.rang || 0));
-  partes.push(bloco('Answered', m.answered || 0));
-  partes.push(bloco('Missed', m.missed || 0, false, null,
-    m.missed > 0 ? 'warn' : ''));
-  partes.push(bloco('Escalated', m.escalated || 0, false, null,
-    m.escalated > 0 ? 'warn' : ''));
+  partes.push(bloco('Resolved', m.resolved || 0, false, null,
+    (m.resolved || 0) > 0 ? 'good' : ''));
 
-  partes.push(bloco('Avg answer',
-    m.avg_answer_seconds != null ? m.avg_answer_seconds + 's' : '—'));
+  // Respondidas e à espera do cliente. Também é trabalho feito.
+  partes.push(bloco('Replied', m.replied || 0));
 
-  // A taxa só ganha cor a partir de cinco chamadas. Uma perdida em
-  // duas dá 50% e não quer dizer nada — pintar isso de vermelho às
-  // nove da manhã é injusto e é ruído.
-  var taxa = m.answer_rate;
-  var corTaxa = '';
+  partes.push(bloco('Messages', m.messages_sent || 0));
 
-  if (taxa != null && (m.rang || 0) >= 5) {
-    corTaxa = taxa >= 90 ? 'good' : (taxa >= 70 ? 'warn' : 'bad');
+  // Ao vivo e tickets, para se ver a mistura do dia.
+  if (m.live_chats || m.tickets) {
+    partes.push(bloco('Live', m.live_chats || 0));
+    partes.push(bloco('Tickets', m.tickets || 0));
   }
 
-  partes.push(bloco('Answer rate',
-    taxa != null ? taxa + '%' : '—', false, null, corTaxa));
+  if (m.escalated) {
+    partes.push(bloco('Escalated', m.escalated, false, null, 'warn'));
+  }
+
+  /**
+   * O tempo até à primeira resposta.
+   *
+   * É a única medida de qualidade aqui: as outras dizem quanto se
+   * fez, esta diz quão depressa. Em minutos porque em segundos um
+   * número de três dígitos não se lê de relance.
+   */
+  if (m.avg_first_reply_seconds != null) {
+    var seg = m.avg_first_reply_seconds;
+
+    partes.push(bloco('First reply',
+      seg < 60 ? seg + 's' : Math.round(seg / 60) + 'm',
+      false, null,
+      seg <= 180 ? 'good' : (seg <= 600 ? 'warn' : 'bad')));
+  }
 
   caixa.innerHTML = partes.join('');
 }

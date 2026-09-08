@@ -1431,18 +1431,33 @@ function agoLabel(minutes) {
  * abas passaram a ser uma.
  */
 function fonteDoChat(chatId) {
-  var c = (desk.chats || []).find(function (x) { return x.chat_id === chatId; });
+  /**
+   * Em todas as listas, não só na fila.
+   *
+   * Procurava no desk.chats. Uma conversa aberta das escaladas ou
+   * da pesquisa não está lá — e a função caía no palpite.
+   */
+  var c = acharChat(chatId);
 
   if (c && c.source) return c.source;
 
-  // Sem a linha, os campos dizem: partner_id só existe numa,
-  // audience só na outra.
+  // Os campos dizem: partner_id só existe numa tabela, audience só
+  // na outra.
   if (c && c.partner_id) return 'partner';
   if (c && c.audience) return 'support';
 
-  // Sem nada, o partner é o palpite seguro: a rota dele existe há
-  // mais tempo e trata do caso antigo.
-  return 'partner';
+  /**
+   * Sem saber, o support.
+   *
+   * Era o partner, e isso causava
+   * "partner_messages_chat_id_fkey": a mensagem ia para a tabela
+   * dos parceiros com o id de uma conversa de cliente.
+   *
+   * A maioria das conversas é de clientes, e uma mensagem na
+   * tabela errada é pior do que uma que não é enviada — fica lá,
+   * invisível, e ninguém percebe porquê.
+   */
+  return 'support';
 }
 
 async function renderChatCtx(chatId) {
@@ -2684,6 +2699,35 @@ el('chatJoinBtn').addEventListener('click', async function () {
  * not be loaded": o painel tinha a conversa aberta no ecrã e não a
  * encontrava na memória.
  */
+/**
+ * Mandar uma mensagem, à tabela que for.
+ *
+ * O painel escolhe a rota pela fonte da conversa, e às vezes
+ * engana-se — uma aberta da pesquisa ou das escaladas não está na
+ * lista carregada.
+ *
+ * Se a rota disser que é da outra tabela, tenta lá. É o que o
+ * agente faria à mão se pudesse, e ele não devia ter de saber que
+ * há duas tabelas.
+ */
+async function enviarParaChat(corpo) {
+  var fonte = fonteDoChat(corpo.chat_id);
+
+  try {
+    return await deskFetch(rotaDaAba('send', fonte), corpo);
+  } catch (e) {
+    // A rota diz qual é a certa quando sabe.
+    if (!/customer conversation|partner conversation/i.test(e.message)) {
+      throw e;
+    }
+
+    var outra = fonte === 'support' ? 'partner' : 'support';
+
+    return await deskFetch(rotaDaAba('send', outra), corpo);
+  }
+}
+
+
 function acharChat(id) {
   if (!id) return null;
 
@@ -2837,7 +2881,15 @@ el('deskFile').addEventListener('change', async function () {
 
     if (up.error) throw new Error(up.error.message);
 
-    var res = await deskFetch(rotaDaAba('send', fonteDoChat(desk.current)), {
+    /**
+     * Se a rota disser que é da outra tabela, tenta lá.
+     *
+     * O painel escolhe pela fonte da conversa, e às vezes
+     * engana-se. Em vez de mostrar um erro que o agente não pode
+     * resolver, tenta a outra — que é o que ele faria à mão se
+     * pudesse.
+     */
+    var res = await enviarParaChat({
       chat_id: desk.current,
       body: el('chatReply').value.trim() || file.name,
       attachment_path: path,
@@ -2869,7 +2921,7 @@ el('chatSendBtn').addEventListener('click', async function () {
   el('chatSendBtn').disabled = true;
 
   try {
-    var res = await deskFetch(rotaDaAba('send', fonteDoChat(desk.current)), {
+    var res = await enviarParaChat({
       chat_id: desk.current,
       body: body,
       internal: deskMode === 'note',

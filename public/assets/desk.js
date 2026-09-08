@@ -459,10 +459,10 @@ async function loadBookings(filters) {
 
 function renderBookingStats() {
   var today = new Date().toISOString().split('T')[0];
-  var live = allBookings.filter(function (b) { return b.status !== 'cancelled'; });
-  el('upcomingBookings').textContent = live.filter(function (b) { return b.booking_date >= today; }).length;
+  var live = (allBookings || []).filter(function (b) { return b.status !== 'cancelled'; });
+  el('upcomingBookings').textContent = (live || []).filter(function (b) { return b.booking_date >= today; }).length;
   el('revenueValue').textContent = live.reduce(function (s, b) { return s + (parseFloat(b.price) || 0); }, 0).toFixed(2);
-  el('cancelledBookings').textContent = allBookings.filter(function (b) { return b.status === 'cancelled'; }).length;
+  el('cancelledBookings').textContent = (allBookings || []).filter(function (b) { return b.status === 'cancelled'; }).length;
   el('totalBookings').textContent = allBookings.length;
 }
 
@@ -1222,7 +1222,7 @@ function pintarSnips(termo) {
   var caixa = el('snipBox');
   var t = String(termo || '').toLowerCase();
 
-  snips.vistos = snips.todos.filter(function (s2) {
+  snips.vistos = (snips.todos || []).filter(function (s2) {
     if (!t) return true;
     return s2.shortcut.toLowerCase().indexOf(t) === 0 ||
       s2.label.toLowerCase().indexOf(t) >= 0;
@@ -1934,7 +1934,7 @@ function renderDesk() {
   // O contador conta quem ESPERA, não quem está a ser atendido: é o
   // número que exige acção. Uma conversa já pegada não precisa de
   // fazer piscar nada.
-  var waiting = desk.chats.filter(function (c) {
+  var waiting = (desk.chats || []).filter(function (c) {
     return c.unread_for_admin > 0 && !c.assigned_to;
   }).length;
 
@@ -2741,11 +2741,22 @@ async function enviarParaChat(corpo) {
 function acharChat(id) {
   if (!id) return null;
 
+  /**
+   * As listas podem não existir no arranque.
+   *
+   * O desk.chats só nasce depois da primeira resposta do
+   * servidor. Chamar .filter() nele antes disso rebenta o painel
+   * inteiro — e o erro aparece longe de onde a causa está.
+   */
   var acha = function (lista) {
-    return (lista || []).find(function (c) { return c.chat_id === id; });
+    if (!lista || !lista.length) return null;
+    return lista.find(function (c) { return c && c.chat_id === id; });
   };
 
-  return acha(desk.chats) || acha(escaladas) || acha(fechadas) || null;
+  return acha(desk && desk.chats)
+    || acha(escaladas)
+    || acha(fechadas)
+    || null;
 }
 
 function chatAtual() {
@@ -5024,7 +5035,7 @@ async function setDeskState(state, aRetomar, desdeQuando) {
 el('deskAlert').addEventListener('click', function () {
   switchTab('chatTab');
 
-  var oldest = desk.chats.filter(function (c) {
+  var oldest = (desk.chats || []).filter(function (c) {
     return c.unread_for_admin > 0 && !c.assigned_to;
   })[0];
 
@@ -5053,7 +5064,7 @@ var chatAlert = null;
 
 function chatWaitingAlert() {
   var fire = function () {
-    var waiting = desk.chats.filter(function (c) {
+    var waiting = (desk.chats || []).filter(function (c) {
       return c.unread_for_admin > 0 && !c.assigned_to;
     }).length;
 

@@ -1800,6 +1800,12 @@ function filaDaAba() {
     return { url: '/api/admin/escalations', tipo: 'escalated' };
   }
 
+  /**
+   * A mesma rota para os dois modos.
+   *
+   * A fila traz tudo com o campo "mode"; o painel filtra. Duas
+   * chamadas seriam duas esperas para mostrar a mesma informação.
+   */
   return { url: '/api/admin/queue', tipo: 'all' };
 }
 
@@ -3107,7 +3113,17 @@ async function carregarEscaladas() {
  * uma etiqueta na linha — a fila é uma, e as regras são as mesmas
  * para toda a gente.
  */
-var audAtual = 'all';
+/**
+ * A aba: 'live', 'tickets' ou 'escalated'.
+ *
+ * Ao vivo é quem está no ecrã à espera. Tickets são os que
+ * ninguém pegou em dez minutos e passaram a funcionar como email.
+ *
+ * Um ticket nunca volta a ser ao vivo: a promessa foi
+ * "respondemos assim que possível", e mudar as regras a meio
+ * confunde.
+ */
+var audAtual = 'live';
 
 /**
  * As abas de público, com o estado de cada fila.
@@ -3208,6 +3224,15 @@ function filtrarConversas(lista) {
      * Dois agentes podem trabalhar a mesma, e esconder o que já tem
      * alguém impedia isso.
      */
+    /**
+     * O modo primeiro.
+     *
+     * Um ticket na aba ao vivo faria o agente responder como se
+     * alguém estivesse à espera — e ninguém está.
+     */
+    if (audAtual === 'live' && c.mode === 'ticket') return false;
+    if (audAtual === 'tickets' && c.mode !== 'ticket') return false;
+
     if (vistaAtual === 'mine') return c.assigned_to === adminId();
     if (vistaAtual === 'waiting') return !c.assigned_to;
     if (vistaAtual === 'taken') return c.assigned_to && c.assigned_to !== adminId();
@@ -3250,13 +3275,6 @@ function gravarPref(o) {
 }
 
 function pintarAudTabs() {
-  /**
-   * As abas só existem no chat.
-   *
-   * Vivem fora dos painéis para não desaparecerem ao mudar de
-   * vista — mas isso significa que apareceriam nas reservas e nas
-   * finanças, onde não querem dizer nada.
-   */
   var emChat = activeTab === 'chatTab';
   el('audTabs').classList.toggle('hidden', !emChat);
 
@@ -3269,16 +3287,30 @@ function pintarAudTabs() {
   var n = contagens || {};
 
   /**
-   * O contador mostra quem ESPERA, não o total.
+   * Ao vivo conta quem ESPERA no ecrã.
    *
-   * Um número que conta as conversas todas — incluindo as que já
-   * têm agente — não diz nada sobre o que há a fazer.
+   * Uma conversa já pegada não precisa de fazer piscar nada — o
+   * agente que a tem sabe que a tem.
    */
-  var espera = el('audNAll');
+  var live = el('audNLive');
 
-  if (espera && !espera.__missing) {
-    espera.textContent = n.waiting || 0;
-    espera.classList.toggle('hidden', !n.waiting);
+  if (live && !live.__missing) {
+    live.textContent = n.live_waiting || 0;
+    live.classList.toggle('hidden', !n.live_waiting);
+  }
+
+  /**
+   * Tickets conta os que esperam por NÓS.
+   *
+   * Um ticket onde a vez é do cliente está à espera dele, não de
+   * nós. Contá-lo faria a fila parecer maior do que é — e um
+   * número que não corresponde a trabalho ensina a ignorá-lo.
+   */
+  var tick = el('audNTickets');
+
+  if (tick && !tick.__missing) {
+    tick.textContent = n.tickets_due || 0;
+    tick.classList.toggle('hidden', !n.tickets_due);
   }
 
   var esc = el('audNEsc');
@@ -3288,7 +3320,6 @@ function pintarAudTabs() {
     esc.classList.toggle('hidden', !escaladas.length);
   }
 
-  // A aba de escalada só para supervisores.
   var tabEsc = el('audTabEsc');
   if (tabEsc && !tabEsc.__missing) {
     tabEsc.classList.toggle('hidden', !souSupervisor);

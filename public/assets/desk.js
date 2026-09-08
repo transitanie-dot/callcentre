@@ -1813,6 +1813,28 @@ async function loadDesk() {
     // Os contadores vêm com a fila.
     if (queue.counts) contagens = queue.counts;
 
+    /**
+     * A aba de escaladas tem a sua própria lista.
+     *
+     * A rota /api/admin/escalations devolve outro formato — sem
+     * assigned_to, sem waiting_since — e caía no mesmo desk.chats
+     * da fila normal.
+     *
+     * Resultado: conversas normais apareciam na De-escalation, e
+     * clicar nelas dizia "conversation could not be loaded" porque
+     * a lista carregada não era a que o painel julgava ter.
+     */
+    if (fila.tipo === 'escalated') {
+      escaladas = queue.chats || [];
+
+      // A fila normal fica como estava: as duas abas mostram
+      // coisas diferentes e não devem partilhar estado.
+      pintarAudTabs();
+      renderDesk();
+      reportHeight();
+      return;
+    }
+
     // A resposta traz as conversas de TODAS as marcas: as abas
     // precisam de contar as filas das outras para mostrar o aviso.
     // A que se desenha é só a da marca ativa.
@@ -2271,7 +2293,9 @@ function deskClock(when) {
  * pessoa.
  */
 async function pegarConversa(chatId) {
-  var chat = desk.chats.find(function (c) { return c.chat_id === chatId; });
+  // A conversa pode vir de qualquer lista: fila, escaladas,
+  // pesquisa, ou a conta de um cliente.
+  var chat = acharChat(chatId);
 
   // Já é minha: abre e pronto.
   if (chat && chat.assigned_to === adminId()) {
@@ -2649,10 +2673,29 @@ el('chatJoinBtn').addEventListener('click', async function () {
 });
 
 /** A conversa aberta, ou um objeto vazio para não rebentar. */
+/**
+ * A conversa aberta, venha de que lista vier.
+ *
+ * Procurava só no desk.chats — a fila normal. Uma conversa aberta
+ * a partir das escaladas, da pesquisa, ou da conta de um cliente
+ * não está lá, e o painel devolvia um objeto vazio.
+ *
+ * Daí o "Take this chat" não fazer nada e o "conversation could
+ * not be loaded": o painel tinha a conversa aberta no ecrã e não a
+ * encontrava na memória.
+ */
+function acharChat(id) {
+  if (!id) return null;
+
+  var acha = function (lista) {
+    return (lista || []).find(function (c) { return c.chat_id === id; });
+  };
+
+  return acha(desk.chats) || acha(escaladas) || acha(fechadas) || null;
+}
+
 function chatAtual() {
-  return (desk.chats || []).find(function (c) {
-    return c.chat_id === desk.current;
-  }) || {};
+  return acharChat(desk.current) || {};
 }
 
 function renderThread() {
@@ -3253,18 +3296,37 @@ function aplicarCargo() {
 async function iniciarApoio() {
   var ses;
 
+  /**
+   * Uma segunda tentativa antes de desistir.
+   *
+   * O serviço de drivers dorme no plano gratuito. A primeira
+   * chamada acorda-o e falha; a segunda, três segundos depois,
+   * costuma passar.
+   *
+   * Sem isto, quem abrisse o painel com o serviço adormecido ficava
+   * offline sem perceber porquê — e voltar a estar online exigia
+   * recarregar a página.
+   */
   try {
     ses = await deskFetch('/api/admin/session');
   } catch (e) {
-    console.error('[desk] session:', e.message);
+    console.warn('[desk] session failed, retrying:', e.message);
 
-    // Sem sessão não se inventa nada. Offline é o estado seguro:
-    // melhor não receber conversas do que julgar que se está a
-    // receber e não estar.
-    desk.state = 'offline';
-    document.body.setAttribute('data-duty', 'offline');
-    pintarDuty();
-    return;
+    await new Promise(function (r) { setTimeout(r, 3000); });
+
+    try {
+      ses = await deskFetch('/api/admin/session');
+    } catch (e2) {
+      console.error('[desk] session:', e2.message);
+
+      // Sem sessão não se inventa nada. Offline é o estado seguro:
+      // melhor não receber conversas do que julgar que se está a
+      // receber e não estar.
+      desk.state = 'offline';
+      document.body.setAttribute('data-duty', 'offline');
+      pintarDuty();
+      return;
+    }
   }
 
   // ---------- quem sou ----------
@@ -3375,6 +3437,17 @@ async function iniciarApoio() {
  * é o estado seguro. Melhor mostrar offline e deixar clicar do que
  * mostrar um limbo em que nada responde.
  */
+/**
+ * Vinte segundos, não oito.
+ *
+ * O serviço de drivers dorme no plano gratuito do Render, e
+ * acordar leva até quinze. Ao fim de oito, o painel dava o agente
+ * como offline — e ele descobria isso ao ver que não recebia
+ * conversas.
+ *
+ * Vinte é mais do que qualquer arranque, e menos do que a
+ * paciência de quem está à espera.
+ */
 setTimeout(function () {
   if (document.body.getAttribute('data-duty') !== 'unknown') return;
 
@@ -3391,7 +3464,7 @@ setTimeout(function () {
   desk.state = 'offline';
   el('dutyNote').textContent = STATE_NOTES.offline;
   pintarDuty();
-}, 8000);
+}, 20000);
 
 async function loadDisplayName() {
   /**
@@ -7321,224 +7394,6 @@ async function marcarPago(id, botao) {
 })();
 
 // ============================================================
-// O MAPA DO MUNDO
-//
-// Uma lista diz quantos parceiros há em cada zona. O mapa mostra
-// que os buracos são geográficos — uma região inteira sem ninguém,
-// e não uma zona isolada.
-//
-// Sem bibliotecas: uma projeção de Mercator cabe em cinco linhas,
-// e um mapa de pontos não precisa de mais. Uma biblioteca de mapas
-// são 200 KB para desenhar sessenta círculos.
-// ============================================================
-
-var cobertura = [];
-var cmFiltro = 'all';
-
-/**
- * Latitude e longitude para píxeis.
- *
- * Mercator, cortado nos 60º norte e 50º sul — acima e abaixo disso
- * não há aeroportos nossos, e incluir a Gronelândia esmagaria a
- * Europa a um quarto do tamanho.
- */
-function projetar(lat, lng, largura, altura) {
-  var x = (Number(lng) + 180) / 360 * largura;
-
-  var radianos = Number(lat) * Math.PI / 180;
-  var mercator = Math.log(Math.tan(Math.PI / 4 + radianos / 2));
-
-  // Os limites, na mesma escala.
-  var cima = Math.log(Math.tan(Math.PI / 4 + (72 * Math.PI / 180) / 2));
-  var baixo = Math.log(Math.tan(Math.PI / 4 + (-55 * Math.PI / 180) / 2));
-
-  var y = altura - ((mercator - baixo) / (cima - baixo)) * altura;
-
-  return { x: x, y: y };
-}
-
-async function carregarMapa() {
-  var svg = el('cmSvg');
-  if (!svg || svg.__missing) return;
-
-  try {
-    var r = await deskFetch('/api/admin/coverage-map');
-    cobertura = r.zones || [];
-    desenharMapa(r.summary || {});
-  } catch (e) {
-    el('cmList').innerHTML =
-      '<div class="error-row">' + escapeHtml(e.message) + '</div>';
-  }
-}
-
-function desenharMapa(resumo) {
-  var svg = el('cmSvg');
-  var L = 1000, A = 500;
-
-  /**
-   * O contorno dos continentes, muito simplificado.
-   *
-   * Não é um mapa cartográfico — é um pano de fundo para os pontos
-   * se situarem. Uma pessoa reconhece a Europa e a América do Sul,
-   * e isso chega para saber onde está a olhar.
-   */
-  var mundo =
-    '<path class="cm-land" d="' +
-    // Europa e Norte de África
-    'M470,90 L520,80 L560,95 L575,130 L560,165 L520,180 L490,200 ' +
-    'L470,230 L440,250 L420,230 L430,190 L450,160 L455,120 Z ' +
-    // Ásia
-    'M575,95 L700,80 L800,100 L860,140 L880,190 L840,230 L780,240 ' +
-    'L720,215 L660,190 L600,160 L578,125 Z ' +
-    // África
-    'M470,235 L530,225 L570,250 L580,310 L555,370 L510,395 L475,370 ' +
-    'L455,310 L460,265 Z ' +
-    // América do Norte
-    'M120,80 L250,70 L310,100 L300,150 L260,190 L220,215 L190,255 ' +
-    'L165,230 L150,180 L120,140 Z ' +
-    // América do Sul
-    'M250,265 L305,255 L330,300 L320,370 L290,420 L265,395 L250,340 Z ' +
-    // Oceania
-    'M810,320 L880,315 L900,355 L865,390 L820,375 L805,345 Z' +
-    '"/>';
-
-  // Os pontos.
-  var pontos = cobertura.map(function (z) {
-    var p = projetar(z.lat, z.lng, L, A);
-
-    /**
-     * O tamanho diz a procura; a cor diz a cobertura.
-     *
-     * Um ponto grande e vermelho é onde se perde dinheiro. Um
-     * pequeno e vermelho é um problema teórico.
-     */
-    var raio = cmFiltro === 'demand'
-      ? Math.min(14, 4 + Math.sqrt(Number(z.bookings_90d || 0)) * 1.6)
-      : 5.5;
-
-    var estado = corDoPonto(z);
-
-    return '<circle class="cm-dot ' + estado + '" ' +
-      'cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" ' +
-      'r="' + raio.toFixed(1) + '" ' +
-      'data-iata="' + escapeHtml(z.iata) + '"><title>' +
-      escapeHtml(z.city + ' · ' + z.sedans + ' sedan, ' + z.vans + ' van') +
-      '</title></circle>';
-  }).join('');
-
-  svg.innerHTML = mundo + pontos;
-
-  // ---------- a legenda ----------
-  el('cmLegend').innerHTML =
-    '<span class="cm-key"><i class="full"></i>' +
-      (resumo.full || 0) + ' covered</span>' +
-    '<span class="cm-key"><i class="partial"></i>' +
-      (resumo.partial || 0) + ' partial</span>' +
-    '<span class="cm-key"><i class="none"></i>' +
-      (resumo.none || 0) + ' empty</span>' +
-    (resumo.demand_uncovered
-      ? '<span class="cm-demand">' + resumo.demand_uncovered +
-        ' bookings in 90 days where we are not covered</span>'
-      : '');
-
-  pintarListaCobertura();
-
-  // Clicar num ponto procura esse parceiro.
-  qsa('#cmSvg [data-iata]').forEach(function (c) {
-    c.addEventListener('click', function () {
-      var iata = c.getAttribute('data-iata');
-
-      el('ptZone').value = iata;
-      ptFilters.zone = iata;
-      renderPartners();
-
-      el('ptZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-  });
-}
-
-/**
- * A cor de um ponto, conforme o filtro.
- *
- * No filtro "sedans" ou "vans", a cor diz só sobre essa classe —
- * uma zona com quatro sedans e nenhuma van fica verde nos sedans e
- * vermelha nas vans. É como se vê o que falta onde.
- */
-function corDoPonto(z) {
-  if (cmFiltro === 'sedan') {
-    return z.sedans >= 2 ? 'full' : (z.sedans > 0 ? 'partial' : 'none');
-  }
-
-  if (cmFiltro === 'van') {
-    return z.vans >= 2 ? 'full' : (z.vans > 0 ? 'partial' : 'none');
-  }
-
-  return z.status || 'none';
-}
-
-/**
- * A lista por baixo do mapa.
- *
- * Só o que precisa de atenção, e por procura: um mapa mostra onde,
- * uma lista ordenada diz por onde começar.
- */
-function pintarListaCobertura() {
-  var precisam = cobertura
-    .filter(function (z) { return corDoPonto(z) !== 'full'; })
-    .sort(function (a, b) {
-      return Number(b.bookings_90d || 0) - Number(a.bookings_90d || 0);
-    })
-    .slice(0, 12);
-
-  if (!precisam.length) {
-    el('cmList').innerHTML =
-      '<div class="no-results">Every zone is covered.</div>';
-    return;
-  }
-
-  el('cmList').innerHTML = precisam.map(function (z) {
-    return '<button class="cm-row" data-zone="' + escapeHtml(z.iata) + '">' +
-      '<span class="cm-dot-inline ' + corDoPonto(z) + '"></span>' +
-      '<b>' + escapeHtml(z.city || z.iata) + '</b>' +
-      '<span class="cm-cars">' + z.sedans + ' sedan · ' + z.vans + ' van</span>' +
-      (z.bookings_90d
-        ? '<span class="cm-dem">' + z.bookings_90d + ' bookings</span>'
-        : '<span class="cm-dem quiet">no demand</span>') +
-      '</button>';
-  }).join('');
-
-  qsa('#cmList [data-zone]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      el('ptZone').value = b.getAttribute('data-zone');
-      ptFilters.zone = b.getAttribute('data-zone');
-      renderPartners();
-    });
-  });
-}
-
-(function () {
-  qsa('[data-cmf]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      cmFiltro = b.getAttribute('data-cmf');
-
-      qsa('[data-cmf]').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
-
-      // Sem ir ao servidor: os dados já cá estão, muda-se a leitura.
-      desenharMapa({
-        full: cobertura.filter(function (z) { return corDoPonto(z) === 'full'; }).length,
-        partial: cobertura.filter(function (z) { return corDoPonto(z) === 'partial'; }).length,
-        none: cobertura.filter(function (z) { return corDoPonto(z) === 'none'; }).length,
-        demand_uncovered: cobertura
-          .filter(function (z) { return corDoPonto(z) !== 'full'; })
-          .reduce(function (t, z) { return t + Number(z.bookings_90d || 0); }, 0)
-      });
-    });
-  });
-})();
-
-// ============================================================
 // O MAPA DE COBERTURA
 //
 // A peça que ninguém pede e que mais vale.
@@ -8877,7 +8732,6 @@ function switchTab(name) {
   // A cobertura carrega-se ao abrir, não no arranque: são 200
   // zonas e ninguém olha para elas todos os dias.
   if (name === 'partnersTab') {
-    carregarMapa();
     carregarCobertura();
     carregarPagamentos();
   }

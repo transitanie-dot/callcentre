@@ -2031,7 +2031,9 @@ function renderDesk() {
   // Os contadores das três vistas. Nunca eram pintados — ficavam a
   // zero com conversas na fila, e isso faz a lista parecer avariada
   // mesmo quando está certa.
-  pintarVistas(desk.chats);
+  // Sem argumento: a função lê as contagens do servidor, que já
+  // vêm separadas por modo.
+  pintarVistas();
 
   var visiveis = filtrarConversas(desk.chats);
 
@@ -3359,31 +3361,7 @@ function pintarVistas() {
 
 
 
-/** Os contadores de cada vista, para se ver sem clicar. */
-function pintarVistas(lista) {
-  var meu = adminId();
 
-  var n = {
-    waiting: lista.filter(function (c) { return !c.assigned_to; }).length,
-    taken: lista.filter(function (c) {
-      return c.assigned_to && c.assigned_to !== meu;
-    }).length,
-    mine: lista.filter(function (c) { return c.assigned_to === meu; }).length
-  };
-
-  n.all = lista.length;
-
-  ['waiting', 'taken', 'mine', 'all'].forEach(function (k) {
-    var el2 = el('qn' + k.charAt(0).toUpperCase() + k.slice(1));
-    if (el2 && !el2.__missing) el2.textContent = n[k];
-  });
-
-  // A vista de quem espera fica vermelha quando há alguém à
-  // espera. É a única que grita, porque é a única onde esperar
-  // custa.
-  var wb = document.querySelector('[data-qview="waiting"]');
-  if (wb) wb.classList.toggle('hot', n.waiting > 0);
-}
 
 function filtrarConversas(lista) {
   var q = (el('deskSearch').value || '').trim().toLowerCase();

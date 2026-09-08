@@ -1876,8 +1876,7 @@ html[data-theme="dark"] .aud-pill.agency{color:#C084FC}
    uma conversa, e sair ao fim de trinta minutos. Isso está no SQL.
 */
 
-/* ============================================================
-   O MAPA DE COBERTURA
+
 
    Uma lista diz quantos parceiros há em cada zona. O mapa mostra
    que os buracos são geográficos — uma região inteira sem
@@ -1965,3 +1964,18 @@ html[data-theme="dark"] .cm-land{opacity:.3}
 
 html[data-theme="dark"] .leg.out{color:#60A5FA}
 html[data-theme="dark"] .leg.ret{color:#C084FC}
+
+/* O ficheiro à espera do Send.
+   Escolher um anexo enviava logo a mensagem — o agente ainda
+   estava a escrever e o cliente já tinha recebido. */
+.desk-file-chip{display:inline-flex;align-items:center;gap:7px;
+  padding:4px 8px 4px 11px;border-radius:8px;background:var(--card-2);
+  border:1px solid var(--border);font-size:12.5px;max-width:220px}
+.desk-file-chip[hidden]{display:none}
+
+.desk-file-chip .fname{overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:var(--muted)}
+
+.desk-file-chip .fx{border:none;background:none;color:var(--muted);
+  font-size:16px;line-height:1;cursor:pointer;padding:0 2px}
+.desk-file-chip .fx:hover{color:var(--bad)}

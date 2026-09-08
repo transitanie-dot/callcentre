@@ -527,6 +527,32 @@
         </div>
       </div>
 
+      <!-- ============ O MAPA ============
+           Uma lista diz quantos parceiros há em cada zona. O mapa
+           mostra que os buracos são geográficos — uma região
+           inteira sem ninguém, e não uma zona isolada.
+
+           É o que decide onde recrutar a seguir. -->
+      <div class="search-section">
+        <h2>Coverage map</h2>
+        <p class="sub" id="cmSub">Two sedans and two vans make a zone green.</p>
+
+        <div class="cm-filters">
+          <button class="cm-f on" data-cmf="all" type="button">All</button>
+          <button class="cm-f" data-cmf="sedan" type="button">Sedans</button>
+          <button class="cm-f" data-cmf="van" type="button">Vans</button>
+          <button class="cm-f" data-cmf="demand" type="button">By demand</button>
+        </div>
+
+        <div class="cm-wrap">
+          <svg id="cmSvg" viewBox="0 0 1000 500" class="cm-svg"></svg>
+          <div class="cm-tip" id="cmTip" hidden></div>
+        </div>
+
+        <div class="cm-legend" id="cmLegend"></div>
+        <div class="cm-list" id="cmList"></div>
+      </div>
+
       <div class="search-section">
         <h2>Zone coverage</h2>
         <p class="sub" id="covSub">Where we sell and cannot serve.</p>
@@ -998,6 +1024,13 @@
            Um agente ao telefone com quem perdeu o email precisa de
            o poder dizer — e num pedido de reembolso, saber que foi
            confirmado é a resposta. -->
+      <!-- A outra perna de uma ida e volta.
+           Um agente ao telefone precisa de saltar entre as duas. -->
+      <div class="detail-full" id="detailPairWrap" hidden>
+        <div class="detail-label">Trip</div>
+        <div class="detail-value" id="detailPair"></div>
+      </div>
+
       <div><div class="detail-label">Pick-up code</div>
         <div class="detail-value"><span class="code-val" id="detailPickupCode">—</span></div></div>
 

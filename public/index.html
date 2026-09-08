@@ -876,6 +876,11 @@
               </div>
               <div class="desk-actions">
                 <button class="clear-btn" id="chatHistBtn" type="button">Past chats</button>
+                <!-- Respondi, agora espero.
+                     Diferente de resolver: o ticket continua aberto e
+                     o cliente pode responder. Sai é da lista de "a
+                     fazer", porque a bola está do lado dele. -->
+                <button class="clear-btn hidden" id="chatRepliedBtn" type="button">Replied &middot; waiting</button>
                 <button class="clear-btn hidden" id="chatEscalateBtn" type="button">Escalate</button>
                 <button class="doc-no hidden" id="chatUrgentBtn" type="button">Flag urgent</button>
                 <button class="doc-ok hidden" id="chatCloseBtn" type="button">Close chat</button>
@@ -904,6 +909,11 @@
               <button class="dm-clip" id="deskAttach" type="button" title="Attach a file">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.3 20.2a5.5 5.5 0 0 1-7.8-7.8l9.2-9.1a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.1a1.8 1.8 0 0 1-2.6-2.6l8.5-8.4"/></svg>
               </button>
+          <!-- O ficheiro escolhido, à espera do Send.
+               Escolher enviava logo — o agente ainda estava a
+               escrever e o cliente já tinha recebido. -->
+          <span class="desk-file-chip" id="deskFileChip" hidden></span>
+
             </div>
 
             <!-- As respostas rápidas. Aparecem ao escrever / na

@@ -94,6 +94,21 @@ var el = function (id) {
 };
 var qsa = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
+/**
+ * As listas do painel, declaradas antes de tudo.
+ *
+ * Estavam espalhadas pelo ficheiro — o "fechadas" na linha 3892 e
+ * o "pintarVistas" na 3275. Com var a variável existe desde o
+ * início mas vale undefined, e .length sobre undefined rebenta o
+ * painel inteiro no arranque.
+ *
+ * Aqui em cima, ninguém as usa antes de existirem.
+ */
+var escaladas = [];
+var fechadas = [];
+var contagens = null;
+
+
 // ============================================================
 // AUTO-ALTURA
 // ============================================================
@@ -1980,7 +1995,7 @@ function renderDesk() {
    * de propósito, para nenhum agente as voltar a pegar.
    */
   if (audAtual === 'escalated') {
-    if (!escaladas.length) {
+    if (!(escaladas || []).length) {
       el('chatList').innerHTML = '<div class="no-results">' +
         'Nothing escalated right now.<br><span style="color:var(--muted);' +
         'font-size:13px">When an agent cannot resolve something, it lands here.' +
@@ -1989,7 +2004,7 @@ function renderDesk() {
     }
 
     el('chatList').innerHTML = '<div class="list-head mine">Escalated <span>' +
-      escaladas.length + '</span></div>' + escaladas.map(function (c) {
+      (escaladas || []).length + '</span></div>' + (escaladas || []).map(function (c) {
         return '<button class="chat-row urgent" data-chat="' + escapeHtml(c.chat_id) +
           '" type="button">' +
           '<div class="row-top"><strong>' +
@@ -2101,9 +2116,9 @@ function renderDesk() {
    */
   // A vista chama-se agora "resolved": é o que o agente diz, e o
   // que distingue de "fechei sem responder".
-  if (vistaAtual === 'resolved' && fechadas.length) {
-    html += '<div class="list-head">Closed by me <span>' + fechadas.length +
-      '</span></div>' + fechadas.map(function (c) {
+  if (vistaAtual === 'resolved' && (fechadas || []).length) {
+    html += '<div class="list-head">Closed by me <span>' + (fechadas || []).length +
+      '</span></div>' + (fechadas || []).map(function (c) {
         return '<button class="chat-row" data-closed="' + escapeHtml(c.chat_id) +
           '" type="button">' +
           '<div class="row-top"><strong>' +
@@ -3132,7 +3147,6 @@ function marcaDe(c) {
 // parceiro explica tudo pela terceira vez à mesma pessoa que já
 // não sabia responder.
 // ============================================================
-var escaladas = [];
 
 /**
  * Quantos estão à espera em cada fila.
@@ -3140,7 +3154,6 @@ var escaladas = [];
  * Vem do servidor com cada carregamento. O browser não tem como
  * saber quantos estão na fila que não está a ver.
  */
-var contagens = null;
 
 
 /** O nome de quem escalou, tirado da nota. */
@@ -3293,7 +3306,19 @@ function pintarVistas() {
       if (k === 'mine') return n.tickets_mine || 0;
     }
 
-    if (audAtual === 'escalated' && k === 'open') return escaladas.length;
+    /**
+     * O "escaladas" pode ainda não ter valor.
+     *
+     * Está declarado com var mais abaixo no ficheiro. O hoisting
+     * faz a variável existir desde o início, mas a valer
+     * undefined — e .length sobre undefined rebenta.
+     *
+     * Isto corre no arranque, antes de a declaração ser
+     * executada.
+     */
+    if (audAtual === 'escalated' && k === 'open') {
+      return (escaladas || []).length;
+    }
 
     return null;
   };
@@ -3320,7 +3345,9 @@ function pintarVistas() {
        * trazer. As fechadas são um pedido à parte, feito quando
        * alguém as quer ver.
        */
-      if (vistaAtual === 'resolved' && !fechadas.length) {
+      // O "fechadas" é declarado mais abaixo: no arranque vale
+      // undefined.
+      if (vistaAtual === 'resolved' && !(fechadas || []).length) {
         carregarFechadas().then(renderDesk);
         return;
       }
@@ -3514,8 +3541,8 @@ function pintarAudTabs() {
   var esc = el('audNEsc');
 
   if (esc && !esc.__missing) {
-    esc.textContent = escaladas.length;
-    esc.classList.toggle('hidden', !escaladas.length);
+    esc.textContent = (escaladas || []).length;
+    esc.classList.toggle('hidden', !(escaladas || []).length);
   }
 
   var tabEsc = el('audTabEsc');
@@ -3888,7 +3915,6 @@ el('histBack').addEventListener('click', function () {
 // alguém ficou por atender.
 // ============================================================
 var fecho = { motivo: 'resolved' };
-var fechadas = [];
 
 /**
  * As conversas que fechei.

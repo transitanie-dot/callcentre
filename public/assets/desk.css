@@ -1875,3 +1875,93 @@ html[data-theme="dark"] .aud-pill.agency{color:#C084FC}
    O que faltava não era o estado: era ele entrar sozinho ao fechar
    uma conversa, e sair ao fim de trinta minutos. Isso está no SQL.
 */
+
+/* ============================================================
+   O MAPA DE COBERTURA
+
+   Uma lista diz quantos parceiros há em cada zona. O mapa mostra
+   que os buracos são geográficos — uma região inteira sem
+   ninguém, e não uma zona isolada.
+   ============================================================ */
+.cm-filters{display:flex;gap:6px;margin:14px 0 12px;flex-wrap:wrap}
+
+.cm-f{padding:5px 13px;border-radius:9px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:inherit;
+  font-size:12.5px;font-weight:600;cursor:pointer}
+.cm-f:hover{color:var(--text)}
+.cm-f.on{background:var(--text);color:var(--card);border-color:var(--text)}
+
+.cm-wrap{position:relative;border:1px solid var(--border);
+  border-radius:14px;overflow:hidden;background:var(--card-2)}
+
+.cm-svg{display:block;width:100%;height:auto}
+
+/* Os continentes: um pano de fundo, não um mapa. Discretos o
+   suficiente para os pontos serem o que se vê. */
+.cm-land{fill:var(--border);opacity:.45}
+html[data-theme="dark"] .cm-land{opacity:.3}
+
+.cm-dot{cursor:pointer;transition:r .15s ease;stroke:var(--card-2);
+  stroke-width:1.5}
+.cm-dot:hover{stroke:var(--text);stroke-width:2}
+
+.cm-dot.full{fill:#16A34A}
+.cm-dot.partial{fill:#CA8A04}
+.cm-dot.none{fill:#DC2626}
+
+/* ---------- a legenda ---------- */
+.cm-legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  margin:12px 0;font-size:12.5px;color:var(--muted)}
+
+.cm-key{display:flex;align-items:center;gap:6px}
+.cm-key i{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+.cm-key i.full{background:#16A34A}
+.cm-key i.partial{background:#CA8A04}
+.cm-key i.none{background:#DC2626}
+
+/* A procura que não se serve. É o número que decide onde
+   recrutar — por isso destaca-se. */
+.cm-demand{margin-left:auto;font-weight:600;color:var(--bad)}
+
+/* ---------- a lista ---------- */
+.cm-list{display:flex;flex-direction:column;gap:1px;
+  border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.cm-list:empty{display:none}
+
+.cm-row{display:flex;align-items:center;gap:10px;width:100%;
+  padding:10px 14px;background:var(--card);border:none;cursor:pointer;
+  font-family:inherit;font-size:13.5px;color:var(--text);text-align:left}
+.cm-row + .cm-row{border-top:1px solid var(--border-soft)}
+.cm-row:hover{background:var(--card-2)}
+
+.cm-dot-inline{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.cm-dot-inline.full{background:#16A34A}
+.cm-dot-inline.partial{background:#CA8A04}
+.cm-dot-inline.none{background:#DC2626}
+
+.cm-row b{flex:0 0 auto;min-width:120px}
+.cm-cars{color:var(--muted);font-size:12.5px;flex:1 1 auto}
+
+.cm-dem{font-family:var(--mono);font-size:11.5px;font-weight:600;
+  color:var(--bad);flex:0 0 auto}
+.cm-dem.quiet{color:var(--muted);font-weight:400}
+
+@media (max-width:640px){
+  .cm-row{flex-wrap:wrap}
+  .cm-row b{min-width:0}
+  .cm-cars{flex:1 1 100%;order:3}
+  .cm-legend{gap:10px;font-size:11.5px}
+  .cm-demand{margin-left:0;flex:1 1 100%}
+}
+
+/* A perna de uma ida e volta.
+   Duas reservas com a mesma referência e as moradas invertidas —
+   sem uma marca, tem de se ler as moradas para saber qual é. */
+.leg{font-family:var(--mono);font-size:9px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;padding:2px 5px;
+  border-radius:4px;margin-left:6px;vertical-align:middle}
+.leg.out{background:rgba(37,99,235,.13);color:#2563EB}
+.leg.ret{background:rgba(147,51,234,.13);color:#9333EA}
+
+html[data-theme="dark"] .leg.out{color:#60A5FA}
+html[data-theme="dark"] .leg.ret{color:#C084FC}

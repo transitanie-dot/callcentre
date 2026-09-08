@@ -691,9 +691,19 @@
        O público passa a ser uma etiqueta na linha da conversa. A
        fila é uma, a ordem é o tempo de espera, e as regras são as
        mesmas para toda a gente. -->
-  <button class="aud-tab active" data-aud="all" type="button">
+  <!-- Ao vivo: alguém está no ecrã à espera. É o que exige
+       resposta em segundos. -->
+  <button class="aud-tab active" data-aud="live" type="button">
     <span class="aud-dot"></span>Live chat
-    <span class="aud-n hidden" id="audNAll">0</span>
+    <span class="aud-n hidden" id="audNLive">0</span>
+  </button>
+
+  <!-- Tickets: ninguém pegou em dez minutos, o cliente foi-se
+       embora. Funciona como email — uma mensagem de cada lado, à
+       vez — e é o que se faz entre conversas ao vivo. -->
+  <button class="aud-tab" data-aud="tickets" type="button">
+    <span class="aud-dot"></span>Tickets
+    <span class="aud-n hidden" id="audNTickets">0</span>
   </button>
 
   <!-- Só supervisores. Uma conversa escalada vive aqui e não na

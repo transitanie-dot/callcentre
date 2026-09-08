@@ -2099,7 +2099,9 @@ function renderDesk() {
    * lista de trabalho não deve ter dentro o que já está feito, mas
    * também não devia ser preciso ir a outro lado para o encontrar.
    */
-  if (vistaAtual === 'closed' && fechadas.length) {
+  // A vista chama-se agora "resolved": é o que o agente diz, e o
+  // que distingue de "fechei sem responder".
+  if (vistaAtual === 'resolved' && fechadas.length) {
     html += '<div class="list-head">Closed by me <span>' + fechadas.length +
       '</span></div>' + fechadas.map(function (c) {
         return '<button class="chat-row" data-closed="' + escapeHtml(c.chat_id) +
@@ -3228,25 +3230,101 @@ var audAtual = 'live';
  * agente olha primeiro para o que já tem — e só depois para o que
  * há por pegar.
  */
-var vistaAtual = 'mine';
+/**
+ * As vistas de cada aba.
+ *
+ * Eram cinco fixas, iguais para todas — quinze combinações, e a
+ * maioria sem sentido. "All" numa aba de tickets mostrava chats ao
+ * vivo; "Waiting" na de-esc não queria dizer nada.
+ *
+ * Agora cada aba tem as suas, e a que abre primeiro é a que
+ * responde à pergunta "o que faço a seguir".
+ */
+var VISTAS = {
+  live: [
+    { k: 'waiting', label: 'Waiting', mid: true },
+    { k: 'mine', label: 'Mine' },
+    { k: 'taken', label: 'With an agent' }
+  ],
 
-qsa('[data-qview]').forEach(function (b) {
-  b.addEventListener('click', function () {
-    vistaAtual = b.getAttribute('data-qview');
+  tickets: [
+    // Os que esperam por nós. É a lista de trabalho.
+    { k: 'todo', label: 'To answer', mid: true },
+    { k: 'mine', label: 'Mine' },
+    { k: 'waitingcust', label: 'Waiting on customer' },
+    { k: 'resolved', label: 'Resolved' }
+  ],
 
-    qsa('[data-qview]').forEach(function (x) {
-      x.classList.toggle('on', x === b);
-    });
+  escalated: [
+    { k: 'open', label: 'Open', mid: true },
+    { k: 'mine', label: 'Mine' },
+    { k: 'resolved', label: 'Resolved' }
+  ]
+};
 
-    // As fechadas vêm de outra chamada: são muitas e raramente se
-    // olha para elas.
-    if (vistaAtual === 'closed' && !fechadas.length) {
-      carregarFechadas();
-    } else {
-      renderDesk();
+var vistaAtual = 'waiting';
+
+
+function pintarVistas() {
+  var lista = VISTAS[audAtual] || VISTAS.live;
+
+  // Se a vista atual não existe nesta aba, volta à primeira.
+  if (!lista.some(function (v) { return v.k === vistaAtual; })) {
+    vistaAtual = lista[0].k;
+  }
+
+  var n = contagens || {};
+
+  var contaDe = function (k) {
+    if (audAtual === 'live') {
+      if (k === 'waiting') return n.live_waiting || 0;
+      if (k === 'mine') return n.live_mine || 0;
+      if (k === 'taken') return n.live_taken || 0;
     }
+
+    if (audAtual === 'tickets') {
+      if (k === 'todo') return n.tickets_due || 0;
+      if (k === 'mine') return n.tickets_mine || 0;
+    }
+
+    if (audAtual === 'escalated' && k === 'open') return escaladas.length;
+
+    return null;
+  };
+
+  el('qViews').innerHTML = lista.map(function (v) {
+    var c = contaDe(v.k);
+
+    return '<button class="q-view' + (v.k === vistaAtual ? ' on' : '') +
+      (v.mid ? ' q-mid' : '') + '" data-qview="' + v.k + '" type="button">' +
+      escapeHtml(v.label) +
+      (c !== null ? ' <span class="q-n">' + c + '</span>' : '') +
+      '</button>';
+  }).join('');
+
+  qsa('[data-qview]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      vistaAtual = b.getAttribute('data-qview');
+      pintarVistas();
+
+      /**
+       * As resolvidas vêm do servidor, não da fila.
+       *
+       * A fila só traz o que está aberto — que é o que deve
+       * trazer. As fechadas são um pedido à parte, feito quando
+       * alguém as quer ver.
+       */
+      if (vistaAtual === 'resolved' && !fechadas.length) {
+        carregarFechadas().then(renderDesk);
+        return;
+      }
+
+      renderDesk();
+    });
   });
-});
+}
+
+
 
 /** Os contadores de cada vista, para se ver sem clicar. */
 function pintarVistas(lista) {
@@ -3302,9 +3380,35 @@ function filtrarConversas(lista) {
     if (audAtual === 'live' && c.mode === 'ticket') return false;
     if (audAtual === 'tickets' && c.mode !== 'ticket') return false;
 
-    if (vistaAtual === 'mine') return c.assigned_to === adminId();
+    /**
+     * As escaladas fora das outras abas.
+     *
+     * Uma conversa escalada saiu da fila de propósito — está com um
+     * supervisor. Mostrá-la na aba ao vivo convidava um agente a
+     * pegá-la de volta.
+     */
+    if (audAtual !== 'escalated' && c.escalated) return false;
+
+    // ---------- ao vivo ----------
     if (vistaAtual === 'waiting') return !c.assigned_to;
     if (vistaAtual === 'taken') return c.assigned_to && c.assigned_to !== adminId();
+
+    // ---------- tickets ----------
+    /**
+     * "To answer": a bola está do nosso lado.
+     *
+     * Um ticket onde a vez é do cliente não é trabalho nosso — está
+     * à espera dele. Misturá-los fazia a lista parecer maior do que
+     * era, e ensinava a ignorá-la.
+     */
+    if (vistaAtual === 'todo') return !c.awaiting_customer;
+    if (vistaAtual === 'waitingcust') return Boolean(c.awaiting_customer);
+
+    // ---------- de-esc ----------
+    if (vistaAtual === 'open') return true;
+
+    // ---------- comum às três ----------
+    if (vistaAtual === 'mine') return c.assigned_to === adminId();
 
     /**
      * 'all' mostra tudo o que está aberto.
@@ -3316,7 +3420,9 @@ function filtrarConversas(lista) {
     if (vistaAtual === 'all') return true;
 
     // 'closed' esconde as abertas: as fechadas vêm de outra lista.
-    if (vistaAtual === 'closed') return false;
+    // Na vista das resolvidas, a fila aberta não entra: elas vêm
+    // de outra fonte, mais abaixo.
+    if (vistaAtual === 'resolved') return false;
 
     return true;
   });
@@ -3393,6 +3499,9 @@ function pintarAudTabs() {
   if (tabEsc && !tabEsc.__missing) {
     tabEsc.classList.toggle('hidden', !souSupervisor);
   }
+
+  // Cada aba tem as suas vistas.
+  pintarVistas();
 }
 
 qsa('[data-aud]').forEach(function (b) {

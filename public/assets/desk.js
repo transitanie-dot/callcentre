@@ -2437,7 +2437,23 @@ function paintChatOwnership(chat) {
   el('chatCloseBtn').classList.toggle('hidden', !mine);
   // Escalar é passar uma conversa MINHA a outra pessoa. Não faz
   // sentido em conversas que não tenho.
-  el('chatEscalateBtn').classList.toggle('hidden', !mine);
+  /**
+   * Escalar só uma vez.
+   *
+   * O botão continuava lá depois de escalada, e carregar outra vez
+   * não fazia nada — ou fazia, e a conversa era escalada duas
+   * vezes, aparecendo duplicada na lista dos supervisores.
+   */
+  el('chatEscalateBtn').classList.toggle('hidden', !mine || chat.escalated);
+
+  /**
+   * "Respondi, agora espero" só nos tickets.
+   *
+   * Numa conversa ao vivo não faz sentido: o cliente está no ecrã
+   * e vai responder já. Num ticket é o fim do turno do agente.
+   */
+  el('chatRepliedBtn').classList.toggle('hidden',
+    !mine || chat.mode !== 'ticket' || chat.awaiting_customer);
   el('chatReleaseBtn').classList.toggle('hidden', !mine);
   el('chatUrgentBtn').textContent = chat.urgent ? 'Remove urgent' : 'Flag urgent';
 
@@ -2864,9 +2880,21 @@ qsa('.dm').forEach(function (b) {
 
 el('deskAttach').addEventListener('click', function () { el('deskFile').click(); });
 
-el('deskFile').addEventListener('change', async function () {
+/**
+ * O anexo espera pelo Send.
+ *
+ * Escolher o ficheiro enviava logo a mensagem, com o texto que
+ * estivesse escrito — ou com o nome do ficheiro se não houvesse
+ * nenhum. O agente ainda estava a escrever e o cliente já tinha
+ * recebido.
+ *
+ * Agora fica guardado e sai com o Send, como no site do cliente.
+ */
+var anexoPendente = null;
+
+el('deskFile').addEventListener('change', function () {
   var file = this.files && this.files[0];
-  if (!file || !desk.current) return;
+  if (!file) return;
 
   if (file.size > 10 * 1024 * 1024) {
     el('chatErr').textContent = 'That file is over the 10 MB limit.';
@@ -2875,64 +2903,105 @@ el('deskFile').addEventListener('change', async function () {
     return;
   }
 
-  el('deskAttach').disabled = true;
+  anexoPendente = file;
+  pintarAnexo();
 
-  try {
-    var ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-    var path = adminId() + '/chat/' + Date.now() + '.' + ext;
-
-    var up = await client.storage.from('chat-attachments').upload(path, file, {
-      contentType: file.type || 'application/octet-stream'
-    });
-
-    if (up.error) throw new Error(up.error.message);
-
-    /**
-     * Se a rota disser que é da outra tabela, tenta lá.
-     *
-     * O painel escolhe pela fonte da conversa, e às vezes
-     * engana-se. Em vez de mostrar um erro que o agente não pode
-     * resolver, tenta a outra — que é o que ele faria à mão se
-     * pudesse.
-     */
-    var res = await enviarParaChat({
-      chat_id: desk.current,
-      body: el('chatReply').value.trim() || file.name,
-      attachment_path: path,
-      attachment_name: file.name,
-      internal: deskMode === 'note'
-    });
-
-    desk.messages.push(res.message);
-    // Respondeu: a espera acaba aqui, sem ter de aguardar o próximo
-    // carregamento da fila para o aviso desaparecer.
-    if (deskMode !== 'note') marcarEspera(null);
-    renderThread();
-    el('chatReply').value = '';
-    await loadDesk();
-  } catch (e) {
-    el('chatErr').textContent = e.message;
-    el('chatErr').style.display = 'block';
-  } finally {
-    el('deskAttach').disabled = false;
-    el('deskFile').value = '';
-  }
+  // Limpar o input: sem isto, escolher o mesmo ficheiro duas vezes
+  // seguidas não dispara o change.
+  this.value = '';
 });
+
+
+function pintarAnexo() {
+  var chip = el('deskFileChip');
+  if (!chip || chip.__missing) return;
+
+  if (!anexoPendente) {
+    chip.hidden = true;
+    chip.innerHTML = '';
+    return;
+  }
+
+  chip.hidden = false;
+  chip.innerHTML =
+    '<span class="fname">' + escapeHtml(anexoPendente.name) + '</span>' +
+    '<button class="fx" id="deskFileClear" type="button" ' +
+    'aria-label="Remove">&times;</button>';
+
+  el('deskFileClear').addEventListener('click', function () {
+    anexoPendente = null;
+    pintarAnexo();
+  });
+}
+
+
+/**
+ * Carregar o ficheiro e devolver o caminho.
+ *
+ * Feito no momento do envio, não ao escolher: um agente que mude
+ * de ideias não deixa lixo no armazenamento.
+ */
+async function subirAnexo() {
+  if (!anexoPendente) return null;
+
+  var f = anexoPendente;
+  var ext = (f.name.split('.').pop() || 'bin').toLowerCase();
+  var path = adminId() + '/chat/' + Date.now() + '.' + ext;
+
+  var up = await client.storage.from('chat-attachments').upload(path, f, {
+    contentType: f.type || 'application/octet-stream'
+  });
+
+  if (up.error) throw new Error(up.error.message);
+
+  return { path: path, name: f.name, type: f.type, size: f.size };
+}
+
+
 
 el('chatSendBtn').addEventListener('click', async function () {
   var body = el('chatReply').value.trim();
-  if (!body || !desk.current) return;
+
+  /**
+   * Um anexo sozinho é uma mensagem.
+   *
+   * Exigir texto obrigava o agente a escrever "aqui está" antes de
+   * mandar um ficheiro. O nome do ficheiro serve de corpo quando
+   * não há mais nada a dizer.
+   */
+  if (!desk.current) return;
+  if (!body && !anexoPendente) return;
+
+  if (!body && anexoPendente) body = anexoPendente.name;
 
   el('chatErr').style.display = 'none';
   el('chatSendBtn').disabled = true;
 
   try {
+        /**
+     * O anexo sobe agora, não ao escolher.
+     *
+     * Um agente que mude de ideias não deixa lixo no
+     * armazenamento — e o ficheiro sai com a mensagem, não antes
+     * dela.
+     */
+    var anexo = await subirAnexo();
+
     var res = await enviarParaChat({
       chat_id: desk.current,
       body: body,
       internal: deskMode === 'note',
-      sender_name: deskMode === 'note' ? (deskDisplayName || 'note') : deskDisplayName
+      sender_name: deskMode === 'note' ? (deskDisplayName || 'note') : deskDisplayName,
+
+      attachment_path: anexo ? anexo.path : null,
+      attachment_name: anexo ? anexo.name : null,
+      attachment_type: anexo ? anexo.type : null,
+      attachment_size: anexo ? anexo.size : null
     });
+
+    // Enviado: o chip desaparece.
+    anexoPendente = null;
+    pintarAnexo();
 
     desk.messages.push(res.message);
     renderThread();
@@ -3802,6 +3871,31 @@ el('closeGo').addEventListener('click', async function () {
 // pessoa. Fechar por não saber responder seria a pior saída: o
 // parceiro fica sem resposta e o problema desaparece do relatório.
 // ============================================================
+el('chatRepliedBtn').addEventListener('click', async function () {
+  if (!desk.current) return;
+
+  el('chatRepliedBtn').disabled = true;
+
+  try {
+    await deskFetch('/api/admin/chat/replied', { chat_id: desk.current });
+
+    /**
+     * Sai da lista, não do ecrã.
+     *
+     * O agente acabou de escrever e pode querer reler o que
+     * escreveu. Fechar a conversa aqui seria tirar-lha da frente
+     * no momento em que ele ainda está nela.
+     */
+    await loadDesk();
+  } catch (e) {
+    el('chatErr').textContent = e.message;
+    el('chatErr').style.display = 'block';
+  } finally {
+    el('chatRepliedBtn').disabled = false;
+  }
+});
+
+
 el('chatEscalateBtn').addEventListener('click', function () {
   if (!desk.current) return;
   el('escNote').value = '';

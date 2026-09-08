@@ -1979,3 +1979,27 @@ html[data-theme="dark"] .leg.ret{color:#C084FC}
 .desk-file-chip .fx{border:none;background:none;color:var(--muted);
   font-size:16px;line-height:1;cursor:pointer;padding:0 2px}
 .desk-file-chip .fx:hover{color:var(--bad)}
+
+/* ============================================================
+   PROCURAR UM TICKET
+
+   A fila mostra o que está aberto. Um ticket resolvido
+   desaparecia do painel — e um cliente com três conversas
+   anteriores não tinha histórico nenhum aos olhos do agente.
+   ============================================================ */
+.tk-bar{display:flex;justify-content:flex-end;margin:8px 0 0}
+
+.tk-search{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0;
+  padding:12px;border-radius:12px;background:var(--card-2);
+  border:1px solid var(--border)}
+.tk-search[hidden]{display:none}
+
+.tk-search input[type="text"]{flex:1 1 240px;min-width:180px}
+.tk-search input,.tk-search select{padding:8px 11px;border-radius:9px;
+  border:1px solid var(--border);background:var(--card);
+  font-family:inherit;font-size:13px;color:var(--text)}
+.tk-search input:focus,.tk-search select:focus{outline:none;
+  border-color:var(--teal)}
+
+.tk-results:empty{display:none}
+.tk-results{margin-bottom:12px}

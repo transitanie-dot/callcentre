@@ -753,37 +753,13 @@
            Agora cada aba tem as suas. -->
       <div class="q-views" id="qViews"></div>
 
-      <!-- ============ PROCURAR UM TICKET ============
-           A fila mostra o que está aberto. Um ticket resolvido
-           desaparecia do painel — e um cliente com três conversas
-           anteriores não tinha histórico nenhum aos olhos do
-           agente.
-
-           O JS desta pesquisa já existia; o HTML nunca foi
-           acrescentado, e o painel avisava "missing element:
-           tkToggle" a cada arranque. -->
+      <!-- O botão que abre a pesquisa.
+           O painel avisava "missing element: tkToggle" a cada
+           arranque: o JS procurava-o e o HTML nunca o teve. -->
       <div class="tk-bar">
         <button class="q-view" id="tkToggle" type="button">Search all tickets</button>
       </div>
 
-      <div class="tk-search" id="tkSearch" hidden>
-        <input type="text" id="tkQuery" placeholder="Name, email, ticket or words in the messages">
-
-        <select id="tkStatus">
-          <option value="">Any status</option>
-          <option value="open">Open</option>
-          <option value="pending">Waiting on customer</option>
-          <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
-        </select>
-
-        <input type="date" id="tkFrom" aria-label="From">
-        <input type="date" id="tkTo" aria-label="To">
-
-        <button class="btn line sm" id="tkGo" type="button">Search</button>
-      </div>
-
-      <div class="tk-results" id="tkResults"></div>
 
       <div class="desk-search">
         <input type="text" id="deskSearch" class="search-input"

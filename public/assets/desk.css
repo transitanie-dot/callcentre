@@ -2017,3 +2017,11 @@ html[data-theme="dark"] .leg.ret{color:#C084FC}
    não o primeiro que se carrega. */
 #chatViewAsBtn{color:var(--muted)}
 #chatViewAsBtn:hover{color:var(--teal);border-color:var(--teal)}
+
+/* A marca da noite numa reserva.
+   Um transfer às três da manhã é mais difícil de atribuir: há
+   menos motoristas disponíveis, e vê-lo na lista permite tratá-lo
+   primeiro. */
+.leg.night{background:rgba(30,41,90,.12);color:#1E293B}
+html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
+  color:#A5B4FC}

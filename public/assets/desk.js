@@ -2466,20 +2466,19 @@ function paintChatOwnership(chat) {
   el('chatEscalateBtn').classList.toggle('hidden', !mine || chat.escalated);
 
   /**
-   * "Respondi, agora espero": nos tickets e nas escaladas.
+   * "Close chat": respondi, espero pelo cliente.
    *
-   * Numa conversa ao vivo não faz sentido — o cliente está no ecrã
-   * e vai responder já.
+   * Nos tickets e nas escaladas. Ao vivo não existe — o cliente
+   * está no ecrã, e ou se resolve ou ele vai-se embora e resolve-se
+   * na mesma.
    *
-   * Numa escalada faz: o supervisor respondeu e a bola passa ao
-   * cliente, exatamente como num ticket. Só mostrava nos tickets, e
-   * quem trabalhava a de-esc não tinha como a arrumar sem a
-   * resolver.
+   * Um chat fechado reabre quando o cliente escrever. Ao fim de
+   * uma semana sem resposta, resolve-se sozinho.
    */
-  var podeAdiar = chat.mode === 'ticket' || chat.escalated;
+  var podeFechar = chat.mode === 'ticket' || chat.escalated;
 
   el('chatRepliedBtn').classList.toggle('hidden',
-    !mine || !podeAdiar || chat.awaiting_customer);
+    !mine || !podeFechar || chat.status === 'closed');
   el('chatReleaseBtn').classList.toggle('hidden', !mine);
   el('chatUrgentBtn').textContent = chat.urgent ? 'Remove urgent' : 'Flag urgent';
 
@@ -3259,6 +3258,18 @@ var audAtual = 'live';
  * Agora cada aba tem as suas, e a que abre primeiro é a que
  * responde à pergunta "o que faço a seguir".
  */
+/**
+ * As vistas de cada aba.
+ *
+ * Os tickets têm três estados e mais nenhum:
+ *
+ *   open      o cliente escreveu, é a nossa vez
+ *   closed    respondemos, esperamos por ele
+ *   resolved  acabou
+ *
+ * Ao vivo não tem "closed": o cliente está no ecrã, e ou se
+ * resolve ou ele vai-se embora e resolve-se na mesma.
+ */
 var VISTAS = {
   live: [
     { k: 'waiting', label: 'Waiting', mid: true },
@@ -3269,43 +3280,23 @@ var VISTAS = {
    * Tudo o que é meu, venha de onde vier.
    *
    * Havia um "Mine" em cada aba — três listas para responder à
-   * mesma pergunta, e um agente que quisesse ver o que tem
-   * abria três.
+   * mesma pergunta.
    */
   mine: [
-    { k: 'todo', label: 'To do', mid: true },
-    { k: 'pending', label: 'Waiting on customer' },
+    { k: 'open', label: 'To do', mid: true },
+    { k: 'closed', label: 'Closed' },
     { k: 'resolved', label: 'Resolved today' }
   ],
 
   tickets: [
-    // Os que esperam por nós. É a lista de trabalho.
-    { k: 'todo', label: 'To answer', mid: true },
-
-    /**
-     * Respondidos, à espera do cliente.
-     *
-     * Ficam sete dias e resolvem-se sozinhos. A maioria dos
-     * clientes não volta a escrever, e alguém teria de os fechar
-     * um a um.
-     */
-    { k: 'pending', label: 'Waiting on customer' },
-
+    { k: 'open', label: 'Open', mid: true },
+    { k: 'closed', label: 'Closed' },
     { k: 'resolved', label: 'Resolved' }
   ],
 
   escalated: [
     { k: 'open', label: 'Open', mid: true },
-
-    /**
-     * Respondidas, à espera do cliente.
-     *
-     * Uma escalada respondida está na mesma situação de um ticket:
-     * o supervisor fez a parte dele e espera. Sem esta vista, ele
-     * tinha de a deixar na lista ou resolvê-la antes do tempo.
-     */
-    { k: 'pending', label: 'Waiting on customer' },
-
+    { k: 'closed', label: 'Closed' },
     { k: 'resolved', label: 'Resolved' }
   ]
 };
@@ -3326,27 +3317,22 @@ function pintarVistas() {
   var contaDe = function (k) {
     if (audAtual === 'live') {
       if (k === 'waiting') return n.live_waiting || 0;
-      if (k === 'mine') return n.live_mine || 0;
       if (k === 'taken') return n.live_taken || 0;
     }
 
     if (audAtual === 'tickets') {
-      if (k === 'todo') return n.tickets_due || 0;
-      if (k === 'mine') return n.tickets_mine || 0;
+      if (k === 'open') return n.tickets_open || 0;
+      if (k === 'closed') return n.tickets_closed || 0;
     }
 
-    /**
-     * O "escaladas" pode ainda não ter valor.
-     *
-     * Está declarado com var mais abaixo no ficheiro. O hoisting
-     * faz a variável existir desde o início, mas a valer
-     * undefined — e .length sobre undefined rebenta.
-     *
-     * Isto corre no arranque, antes de a declaração ser
-     * executada.
-     */
-    if (audAtual === 'escalated' && k === 'open') {
-      return (escaladas || []).length;
+    if (audAtual === 'escalated') {
+      if (k === 'open') return n.escalated_open || 0;
+      if (k === 'closed') return n.escalated_closed || 0;
+    }
+
+    if (audAtual === 'mine') {
+      if (k === 'open') return n.mine_open || 0;
+      if (k === 'closed') return n.mine_closed || 0;
     }
 
     return null;
@@ -3423,10 +3409,17 @@ function filtrarConversas(lista) {
      * esta aba veio substituir.
      */
     if (audAtual === 'mine') {
+      /**
+       * A aba "Mine" ignora o modo.
+       *
+       * Uma conversa minha é minha, seja ao vivo, ticket ou
+       * escalada. Filtrar por modo aqui recriava as três listas
+       * que esta aba veio substituir.
+       */
       if (c.assigned_to !== adminId()) return false;
 
-      if (vistaAtual === 'todo') return c.status !== 'pending';
-      if (vistaAtual === 'pending') return c.status === 'pending';
+      if (vistaAtual === 'open') return c.status === 'open';
+      if (vistaAtual === 'closed') return c.status === 'closed';
       if (vistaAtual === 'resolved') return false;
 
       return true;
@@ -3448,41 +3441,17 @@ function filtrarConversas(lista) {
     if (vistaAtual === 'waiting') return !c.assigned_to;
     if (vistaAtual === 'taken') return c.assigned_to && c.assigned_to !== adminId();
 
-    // ---------- tickets ----------
     /**
-     * "To answer": a bola está do nosso lado.
+     * ---------- tickets e de-esc ----------
      *
-     * Um ticket onde a vez é do cliente não é trabalho nosso — está
-     * à espera dele. Misturá-los fazia a lista parecer maior do que
-     * era, e ensinava a ignorá-la.
-     */
-    /**
-     * "To answer": a bola está do nosso lado.
+     * Três estados e mais nenhum:
      *
-     * Um pendente não entra: já foi respondido, e está à espera do
-     * cliente. Misturá-los fazia a lista parecer maior do que era.
+     *   open      o cliente escreveu, é a nossa vez
+     *   closed    respondemos, esperamos por ele
+     *   resolved  vem de outra fonte, mais abaixo
      */
-    if (vistaAtual === 'todo') {
-      return c.status !== 'pending' && !c.awaiting_customer;
-    }
-
-    if (vistaAtual === 'pending') return c.status === 'pending';
-
-    // ---------- de-esc ----------
-    // "Open" é o que está por fazer: as respondidas têm vista
-    // própria.
-    if (vistaAtual === 'open') return c.status !== 'pending';
-
-    // ---------- comum às três ----------
-    /**
-     * "Mine" é o que tenho para fazer.
-     *
-     * Um pendente meu está à espera do cliente — tê-lo aqui era
-     * ter na lista de trabalho o que não é trabalho.
-     */
-    if (vistaAtual === 'mine') {
-      return c.assigned_to === adminId() && c.status !== 'pending';
-    }
+    if (vistaAtual === 'open') return c.status === 'open';
+    if (vistaAtual === 'closed') return c.status === 'closed';
 
     /**
      * 'all' mostra tudo o que está aberto.
@@ -3558,8 +3527,9 @@ function pintarAudTabs() {
   var tick = el('audNTickets');
 
   if (tick && !tick.__missing) {
-    tick.textContent = n.tickets_due || 0;
-    tick.classList.toggle('hidden', !n.tickets_due);
+    // Os abertos: a nossa vez. Os fechados esperam pelo cliente.
+    tick.textContent = n.tickets_open || 0;
+    tick.classList.toggle('hidden', !n.tickets_open);
   }
 
   /**
@@ -3572,19 +3542,15 @@ function pintarAudTabs() {
   var meu = el('audNMine');
 
   if (meu && !meu.__missing) {
-    var porFazer = (desk.chats || []).filter(function (c) {
-      return c.assigned_to === adminId() && c.status !== 'pending';
-    }).length;
-
-    meu.textContent = porFazer;
-    meu.classList.toggle('hidden', !porFazer);
+    meu.textContent = n.mine_open || 0;
+    meu.classList.toggle('hidden', !n.mine_open);
   }
 
   var esc = el('audNEsc');
 
   if (esc && !esc.__missing) {
-    esc.textContent = (escaladas || []).length;
-    esc.classList.toggle('hidden', !(escaladas || []).length);
+    esc.textContent = n.escalated_open || 0;
+    esc.classList.toggle('hidden', !n.escalated_open);
   }
 
   var tabEsc = el('audTabEsc');
@@ -4077,7 +4043,7 @@ el('chatRepliedBtn').addEventListener('click', async function () {
   el('chatRepliedBtn').disabled = true;
 
   try {
-    await deskFetch('/api/admin/chat/replied', { chat_id: desk.current });
+    await deskFetch('/api/admin/chat/close', { chat_id: desk.current });
 
     /**
      * Sai da lista, não do ecrã.

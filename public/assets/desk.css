@@ -1,4 +1,3 @@
-
 .chat-clock{display:flex;flex-direction:column;align-items:flex-end;gap:2px;
   padding:0 14px;margin-left:auto}
 .clock-t{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:19px;
@@ -1328,7 +1327,31 @@
 
   body.chat-open .desk-actions .clear-btn,
   body.chat-open .desk-actions .doc-no{
-    flex:0 0 auto;padding:7px 11px;font-size:11.5px;white-space:nowrap}
+    flex:0 0 auto;padding:5px 8px;font-size:10px;white-space:nowrap;
+    letter-spacing:0}
+
+  /**
+   * O resto da conversa em letra mais pequena.
+   *
+   * Num ecrã de 380 pixels, 14px de letra dão sete palavras por
+   * linha. Uma mensagem de três frases ocupa o ecrã inteiro e a
+   * caixa de escrita fica lá em baixo, a uma rolagem de distância.
+   *
+   * Com 12,5 cabem dez palavras por linha e a mesma mensagem
+   * ocupa dois terços. Continua legível — é o tamanho de uma app
+   * de mensagens — e a conversa cabe.
+   */
+  body.chat-open #chatThread{font-size:12.5px;padding:8px 10px}
+  body.chat-open .d-bub{padding:7px 10px;font-size:12.5px;line-height:1.45}
+  body.chat-open .d-day{font-size:10px;margin:8px 0 4px}
+  body.chat-open .d-meta{font-size:9.5px}
+  body.chat-open .d-note{font-size:11.5px}
+  body.chat-open .msg-ini{width:22px;height:22px;font-size:9px}
+  body.chat-open .desk-head .who{font-size:13px}
+  body.chat-open .desk-head .sub{font-size:10.5px}
+  body.chat-open #chatReply{font-size:14px;padding:8px 10px}
+  body.chat-open .desk-mode{padding:6px 10px 0;font-size:11px}
+  body.chat-open .desk-mode .dm{padding:4px 8px;font-size:10.5px}
 
   /**
    * O botão de voltar, colado ao topo.
@@ -1351,14 +1374,49 @@
   body.chat-open .desk-back svg{width:17px;height:17px}
   body.chat-open .desk-back:active{background:var(--card-2)}
 
+  /**
+   * E um X à direita, para fechar.
+   *
+   * O "All conversations" está em cima e é o que se lê. Mas quem
+   * quer sair procura um X no canto — é onde está em todas as
+   * apps, e é onde o polegar vai sem pensar.
+   *
+   * Feito com o próprio desk-back: um pseudo-elemento à direita,
+   * que responde ao mesmo clique. Sem HTML novo.
+   */
+  body.chat-open .desk-back{position:relative;padding-right:52px}
+  body.chat-open .desk-back::after{
+    content:'\00d7';position:absolute;right:10px;top:50%;
+    transform:translateY(-50%);width:34px;height:34px;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:9px;background:var(--card-2);
+    font-size:22px;line-height:1;color:var(--text)}
+
   /* O relógio e o aviso de resposta saem: ocupam a largura que os
      botões precisam, e a informação está na lista. */
   body.chat-open .chat-clock,
   body.chat-open .reply-warn{display:none}
 
-  /* O contexto do cliente sai da frente: o ecrã é para a conversa.
-     Continua acessível pelo botão de detalhes. */
-  body.chat-open #chatCtx{display:none}
+  /**
+   * O contexto do cliente fica, em letra pequena.
+   *
+   * Tinha-o escondido para dar espaço à conversa. Mas quem
+   * responde a um cliente precisa de saber que reserva é, para
+   * quando, e se já pagou — e ir buscá-lo a outro sítio é perder
+   * a linha de pensamento.
+   *
+   * Fica, compacto, a rolar na horizontal se for preciso.
+   */
+  body.chat-open #chatCtx{
+    display:block;flex:0 0 auto;
+    padding:6px 10px;font-size:10.5px;line-height:1.4;
+    max-height:64px;overflow-y:auto;
+    border-bottom:1px solid var(--border-soft);
+    background:var(--card-2)}
+
+  body.chat-open #chatCtx .ctx-row,
+  body.chat-open #chatCtx > div{padding:2px 0}
+  body.chat-open #chatCtx b{font-weight:600}
 
   /**
    * O corpo não rola por trás.

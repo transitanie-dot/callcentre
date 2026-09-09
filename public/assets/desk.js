@@ -3289,13 +3289,25 @@ var VISTAS = {
   ],
 
   tickets: [
+    // Sem dono: por pegar.
     { k: 'open', label: 'Open', mid: true },
+
+    /**
+     * Todos, incluindo os que já têm dono.
+     *
+     * O "Open" mostra o que está por pegar; este mostra o estado
+     * da fila inteira. São perguntas diferentes: uma é "o que faço
+     * a seguir", a outra é "como estamos".
+     */
+    { k: 'all', label: 'All tickets' },
+
     { k: 'closed', label: 'Closed' },
     { k: 'resolved', label: 'Resolved' }
   ],
 
   escalated: [
     { k: 'open', label: 'Open', mid: true },
+    { k: 'all', label: 'All' },
     { k: 'closed', label: 'Closed' },
     { k: 'resolved', label: 'Resolved' }
   ]
@@ -3321,12 +3333,14 @@ function pintarVistas() {
     }
 
     if (audAtual === 'tickets') {
-      if (k === 'open') return n.tickets_open || 0;
+      if (k === 'open') return n.tickets_unassigned || 0;
+      if (k === 'all') return n.tickets_open || 0;
       if (k === 'closed') return n.tickets_closed || 0;
     }
 
     if (audAtual === 'escalated') {
-      if (k === 'open') return n.escalated_open || 0;
+      if (k === 'open') return n.escalated_unassigned || 0;
+      if (k === 'all') return n.escalated_open || 0;
       if (k === 'closed') return n.escalated_closed || 0;
     }
 
@@ -3420,6 +3434,9 @@ function filtrarConversas(lista) {
 
       if (vistaAtual === 'open') return c.status === 'open';
       if (vistaAtual === 'closed') return c.status === 'closed';
+
+    // "All" é a fila inteira, com dono ou sem ele.
+    if (vistaAtual === 'all') return c.status !== 'resolved';
       if (vistaAtual === 'resolved') return false;
 
       return true;
@@ -3449,8 +3466,18 @@ function filtrarConversas(lista) {
      *   open      o cliente escreveu, é a nossa vez
      *   closed    respondemos, esperamos por ele
      *   resolved  vem de outra fonte, mais abaixo
+     *
+     * E o "open" é só o que NÃO tem dono.
+     *
+     * Um ticket pego por alguém saiu da fila — está no "Mine"
+     * dele. Deixá-lo aqui punha-o em duas listas ao mesmo tempo, e
+     * dois agentes a olhar para a mesma fila viam trabalho que já
+     * está a ser feito.
      */
-    if (vistaAtual === 'open') return c.status === 'open';
+    if (vistaAtual === 'open') {
+      return c.status === 'open' && !c.assigned_to;
+    }
+
     if (vistaAtual === 'closed') return c.status === 'closed';
 
     /**
@@ -3527,9 +3554,14 @@ function pintarAudTabs() {
   var tick = el('audNTickets');
 
   if (tick && !tick.__missing) {
-    // Os abertos: a nossa vez. Os fechados esperam pelo cliente.
-    tick.textContent = n.tickets_open || 0;
-    tick.classList.toggle('hidden', !n.tickets_open);
+    /**
+     * A aba conta os que ninguém pegou.
+     *
+     * Um ticket já atribuído não precisa de fazer piscar nada — o
+     * agente que o tem sabe que o tem.
+     */
+    tick.textContent = n.tickets_unassigned || 0;
+    tick.classList.toggle('hidden', !n.tickets_unassigned);
   }
 
   /**

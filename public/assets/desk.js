@@ -2466,13 +2466,20 @@ function paintChatOwnership(chat) {
   el('chatEscalateBtn').classList.toggle('hidden', !mine || chat.escalated);
 
   /**
-   * "Respondi, agora espero" só nos tickets.
+   * "Respondi, agora espero": nos tickets e nas escaladas.
    *
-   * Numa conversa ao vivo não faz sentido: o cliente está no ecrã
-   * e vai responder já. Num ticket é o fim do turno do agente.
+   * Numa conversa ao vivo não faz sentido — o cliente está no ecrã
+   * e vai responder já.
+   *
+   * Numa escalada faz: o supervisor respondeu e a bola passa ao
+   * cliente, exatamente como num ticket. Só mostrava nos tickets, e
+   * quem trabalhava a de-esc não tinha como a arrumar sem a
+   * resolver.
    */
+  var podeAdiar = chat.mode === 'ticket' || chat.escalated;
+
   el('chatRepliedBtn').classList.toggle('hidden',
-    !mine || chat.mode !== 'ticket' || chat.awaiting_customer);
+    !mine || !podeAdiar || chat.awaiting_customer);
   el('chatReleaseBtn').classList.toggle('hidden', !mine);
   el('chatUrgentBtn').textContent = chat.urgent ? 'Remove urgent' : 'Flag urgent';
 
@@ -3279,6 +3286,16 @@ var VISTAS = {
   escalated: [
     { k: 'open', label: 'Open', mid: true },
     { k: 'mine', label: 'Mine' },
+
+    /**
+     * Respondidas, à espera do cliente.
+     *
+     * Uma escalada respondida está na mesma situação de um ticket:
+     * o supervisor fez a parte dele e espera. Sem esta vista, ele
+     * tinha de a deixar na lista ou resolvê-la antes do tempo.
+     */
+    { k: 'pending', label: 'Waiting on customer' },
+
     { k: 'resolved', label: 'Resolved' }
   ]
 };
@@ -3425,7 +3442,9 @@ function filtrarConversas(lista) {
     if (vistaAtual === 'pending') return c.status === 'pending';
 
     // ---------- de-esc ----------
-    if (vistaAtual === 'open') return true;
+    // "Open" é o que está por fazer: as respondidas têm vista
+    // própria.
+    if (vistaAtual === 'open') return c.status !== 'pending';
 
     // ---------- comum às três ----------
     /**

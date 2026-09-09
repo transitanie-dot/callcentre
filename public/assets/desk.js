@@ -4043,7 +4043,7 @@ el('chatRepliedBtn').addEventListener('click', async function () {
   el('chatRepliedBtn').disabled = true;
 
   try {
-    await deskFetch('/api/admin/chat/close', { chat_id: desk.current });
+    await deskFetch('/api/admin/chat/awaiting-reply', { chat_id: desk.current });
 
     /**
      * Sai da lista, não do ecrã.

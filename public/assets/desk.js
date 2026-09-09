@@ -4094,6 +4094,55 @@ el('chatRepliedBtn').addEventListener('click', async function () {
 });
 
 
+/**
+ * Ver a conta do cliente, em leitura.
+ *
+ * Abre numa janela nova com um código de dez minutos. Não é uma
+ * sessão dele — é a página dele com tudo o que escreve desligado.
+ *
+ * O motivo é pedido antes: ver a conta de alguém é ver o que ele
+ * comprou, quanto pagou e para onde viajou. Uma linha a dizer
+ * porquê é o que separa uma ferramenta de trabalho de uma
+ * bisbilhotice.
+ */
+el('chatViewAsBtn').addEventListener('click', async function () {
+  var chat = chatAtual();
+  var email = chat.email;
+
+  if (!email) {
+    return avisar('Heads up', 'This conversation has no email on it.');
+  }
+
+  var motivo = prompt(
+    'Why are you opening ' + email + '?\n\n' +
+    'One line. It goes in the log a supervisor can read.'
+  );
+
+  if (motivo === null) return;
+
+  try {
+    var r = await deskFetch('/api/admin/view-as', {
+      email: email,
+      kind: chat.source === 'partner' ? 'partner'
+        : (chat.audience === 'agency' ? 'agency' : 'customer'),
+      reason: motivo.trim() || null,
+      chat_id: desk.current
+    });
+
+    if (!r.has_account) {
+      avisar('Heads up',
+        'There is no account with that email. You will see the ' +
+        'bookings, but the page will look empty to them too — which ' +
+        'may well be the problem.');
+    }
+
+    window.open(r.url, '_blank', 'noopener');
+  } catch (e) {
+    avisar('Could not open it', e.message);
+  }
+});
+
+
 el('chatEscalateBtn').addEventListener('click', function () {
   if (!desk.current) return;
   el('escNote').value = '';

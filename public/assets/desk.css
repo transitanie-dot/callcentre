@@ -2012,3 +2012,8 @@ html[data-theme="dark"] .leg.ret{color:#C084FC}
 @media (max-width:640px){
   .aud-tab.mine-tab{margin-left:0;border-left:none;padding-left:11px}
 }
+
+/* Ver a conta do cliente. Discreto: é uma ferramenta de recurso,
+   não o primeiro que se carrega. */
+#chatViewAsBtn{color:var(--muted)}
+#chatViewAsBtn:hover{color:var(--teal);border-color:var(--teal)}

@@ -2003,3 +2003,12 @@ html[data-theme="dark"] .leg.ret{color:#C084FC}
 
 .tk-results:empty{display:none}
 .tk-results{margin-bottom:12px}
+
+/* A aba do que é meu: separada das filas por uma linha.
+   As outras são o que há para fazer; esta é o que eu tenho. */
+.aud-tab.mine-tab{margin-left:auto;border-left:1px solid var(--border);
+  padding-left:16px}
+
+@media (max-width:640px){
+  .aud-tab.mine-tab{margin-left:0;border-left:none;padding-left:11px}
+}

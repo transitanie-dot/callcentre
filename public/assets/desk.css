@@ -1305,9 +1305,56 @@
   /* A caixa cresce com o texto, até quatro linhas. */
   body.chat-open #chatReply{max-height:110px;font-size:16px}
 
-  /* Os botões da barra cabem num ecrã estreito. */
-  body.chat-open .desk-actions{flex-wrap:wrap;gap:6px}
-  body.chat-open .desk-actions .clear-btn{padding:6px 10px;font-size:11.5px}
+  /**
+   * Os botões da conversa, numa barra que rola.
+   *
+   * Eram cinco — fechar, resolver, escalar, ver a conta, urgente —
+   * numa linha que quebrava e empurrava o thread para fora do
+   * ecrã. Em quatro linhas de botões, a conversa ficava com um
+   * terço da altura.
+   *
+   * Numa fila horizontal que rola, ocupam uma linha e continuam
+   * todos lá. O primeiro é o que mais se usa.
+   */
+  body.chat-open .desk-head{
+    flex-wrap:nowrap;padding:10px 12px;gap:10px;align-items:center}
+
+  body.chat-open .desk-actions{
+    flex-wrap:nowrap;overflow-x:auto;gap:6px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+    padding-bottom:2px;margin-left:auto}
+
+  body.chat-open .desk-actions::-webkit-scrollbar{display:none}
+
+  body.chat-open .desk-actions .clear-btn,
+  body.chat-open .desk-actions .doc-no{
+    flex:0 0 auto;padding:7px 11px;font-size:11.5px;white-space:nowrap}
+
+  /**
+   * O botão de voltar, colado ao topo.
+   *
+   * É irmão do cabeçalho, não filho — fica numa linha própria
+   * acima dele. Isso está bem: é o primeiro que o polegar
+   * encontra, e não rouba largura aos outros.
+   *
+   * Fixo, para não fugir com o thread a rolar. Sem isto, quem
+   * descesse na conversa perdia a única saída.
+   */
+  body.chat-open .desk-back{
+    display:inline-flex;flex:0 0 auto;
+    padding:11px 14px;gap:8px;
+    border-bottom:1px solid var(--border-soft);
+    width:100%;justify-content:flex-start;
+    background:var(--card);color:var(--muted);
+    font-size:13.5px;font-weight:600}
+
+  body.chat-open .desk-back svg{width:17px;height:17px}
+  body.chat-open .desk-back:active{background:var(--card-2)}
+
+  /* O relógio e o aviso de resposta saem: ocupam a largura que os
+     botões precisam, e a informação está na lista. */
+  body.chat-open .chat-clock,
+  body.chat-open .reply-warn{display:none}
 
   /* O contexto do cliente sai da frente: o ecrã é para a conversa.
      Continua acessível pelo botão de detalhes. */

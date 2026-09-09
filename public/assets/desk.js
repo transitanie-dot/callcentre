@@ -2842,13 +2842,13 @@ function renderThread() {
         : '<span class="msg-ini">' + escapeHtml(iniciais(quem.nome)) + '</span>') +
       '<div>' +
       '<div class="d-bub">' +
-      (m.attachment_path
-        ? '<a class="d-file" href="#" data-dfile="' + escapeHtml(m.attachment_path) + '">' +
+      ((m.file_path || m.attachment_path)
+        ? '<a class="d-file" href="#" data-dfile="' + escapeHtml((m.file_path || m.attachment_path)) + '">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
           'stroke-linecap="round" stroke-linejoin="round">' +
           '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
           '<path d="M14 2v6h6"/></svg><span>' +
-          escapeHtml(m.attachment_name || 'attachment') + '</span></a>' +
+          escapeHtml((m.file_name || m.attachment_name) || 'attachment') + '</span></a>' +
           (m.body ? '<div style="margin-top:8px">' + escapeHtml(m.body) + '</div>' : '')
         : escapeHtml(m.body || '')) + '</div>' +
       (last
@@ -3262,14 +3262,25 @@ var audAtual = 'live';
 var VISTAS = {
   live: [
     { k: 'waiting', label: 'Waiting', mid: true },
-    { k: 'mine', label: 'Mine' },
     { k: 'taken', label: 'With an agent' }
+  ],
+
+  /**
+   * Tudo o que é meu, venha de onde vier.
+   *
+   * Havia um "Mine" em cada aba — três listas para responder à
+   * mesma pergunta, e um agente que quisesse ver o que tem
+   * abria três.
+   */
+  mine: [
+    { k: 'todo', label: 'To do', mid: true },
+    { k: 'pending', label: 'Waiting on customer' },
+    { k: 'resolved', label: 'Resolved today' }
   ],
 
   tickets: [
     // Os que esperam por nós. É a lista de trabalho.
     { k: 'todo', label: 'To answer', mid: true },
-    { k: 'mine', label: 'Mine' },
 
     /**
      * Respondidos, à espera do cliente.
@@ -3285,7 +3296,6 @@ var VISTAS = {
 
   escalated: [
     { k: 'open', label: 'Open', mid: true },
-    { k: 'mine', label: 'Mine' },
 
     /**
      * Respondidas, à espera do cliente.
@@ -3405,6 +3415,23 @@ function filtrarConversas(lista) {
      * Um ticket na aba ao vivo faria o agente responder como se
      * alguém estivesse à espera — e ninguém está.
      */
+    /**
+     * A aba "Mine" ignora o modo.
+     *
+     * Uma conversa minha é minha, seja ao vivo, ticket ou
+     * escalada. Filtrar por modo aqui recriava as três listas que
+     * esta aba veio substituir.
+     */
+    if (audAtual === 'mine') {
+      if (c.assigned_to !== adminId()) return false;
+
+      if (vistaAtual === 'todo') return c.status !== 'pending';
+      if (vistaAtual === 'pending') return c.status === 'pending';
+      if (vistaAtual === 'resolved') return false;
+
+      return true;
+    }
+
     if (audAtual === 'live' && c.mode === 'ticket') return false;
     if (audAtual === 'tickets' && c.mode !== 'ticket') return false;
 
@@ -3533,6 +3560,24 @@ function pintarAudTabs() {
   if (tick && !tick.__missing) {
     tick.textContent = n.tickets_due || 0;
     tick.classList.toggle('hidden', !n.tickets_due);
+  }
+
+  /**
+   * O meu conta o que tenho por fazer.
+   *
+   * Não tudo o que é meu: um pendente está à espera do cliente e
+   * não exige nada. Um número que não corresponde a trabalho
+   * ensina a ignorá-lo.
+   */
+  var meu = el('audNMine');
+
+  if (meu && !meu.__missing) {
+    var porFazer = (desk.chats || []).filter(function (c) {
+      return c.assigned_to === adminId() && c.status !== 'pending';
+    }).length;
+
+    meu.textContent = porFazer;
+    meu.classList.toggle('hidden', !porFazer);
   }
 
   var esc = el('audNEsc');
@@ -4760,39 +4805,51 @@ function pintarDia() {
   });
 
   /**
-   * O que se FEZ, não o que se ofereceu.
+   * O que o agente fez hoje.
    *
-   * As métricas contavam ofertas: quantas vezes tocou, quantas
-   * foram atendidas. Um agente que respondesse a quarenta tickets
-   * num dia tinha "0 resolved", porque nenhum era uma oferta.
-   *
-   * Agora contam trabalho: resolvidas, respondidas, mensagens
-   * escritas.
+   * Não o que lhe ofereceram. Um agente que responda a quarenta
+   * tickets tinha "0 resolved" porque nenhum era uma oferta
+   * aceite.
    */
+  partes.push(bloco('Handled', m.handled || 0));
+
   partes.push(bloco('Resolved', m.resolved || 0, false, null,
     (m.resolved || 0) > 0 ? 'good' : ''));
 
   // Respondidas e à espera do cliente. Também é trabalho feito.
   partes.push(bloco('Replied', m.replied || 0));
 
-  partes.push(bloco('Messages', m.messages_sent || 0));
-
-  // Ao vivo e tickets, para se ver a mistura do dia.
-  if (m.live_chats || m.tickets) {
-    partes.push(bloco('Live', m.live_chats || 0));
-    partes.push(bloco('Tickets', m.tickets || 0));
-  }
-
   if (m.escalated) {
     partes.push(bloco('Escalated', m.escalated, false, null, 'warn'));
+  }
+
+  partes.push(bloco('Messages', m.messages_sent || 0));
+
+  /**
+   * As percentagens, sobre o que pegou.
+   *
+   * "Resolvi cinco" não diz se foram cinco de cinco ou cinco de
+   * cinquenta. A percentagem diz.
+   *
+   * Só a partir de cinco conversas: uma resolvida em duas dá 50% e
+   * não quer dizer nada — pintar isso às nove da manhã é ruído.
+   */
+  if ((m.handled || 0) >= 5) {
+    partes.push(bloco('Resolve rate', (m.resolve_rate || 0) + '%',
+      false, null,
+      m.resolve_rate >= 70 ? 'good' : (m.resolve_rate >= 40 ? '' : 'warn')));
+
+    if (m.escalate_rate) {
+      partes.push(bloco('Escalated', m.escalate_rate + '%', false, null,
+        m.escalate_rate > 30 ? 'warn' : ''));
+    }
   }
 
   /**
    * O tempo até à primeira resposta.
    *
    * É a única medida de qualidade aqui: as outras dizem quanto se
-   * fez, esta diz quão depressa. Em minutos porque em segundos um
-   * número de três dígitos não se lê de relance.
+   * fez, esta diz quão depressa.
    */
   if (m.avg_first_reply_seconds != null) {
     var seg = m.avg_first_reply_seconds;

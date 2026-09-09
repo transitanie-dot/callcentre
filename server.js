@@ -28,6 +28,84 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
+
+/**
+ * ---------------------------------------------------------------
+ * OS CABEÇALHOS DE SEGURANÇA
+ *
+ * Escritos à mão em vez do helmet: seis linhas contra uma
+ * dependência de 90 KB, e cada uma explicada.
+ * ---------------------------------------------------------------
+ */
+app.use((req, res, next) => {
+  // Só HTTPS, e o browser lembra-se por um ano.
+  res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+  // O browser não adivinha o tipo do ficheiro: um upload com HTML
+  // dentro não é servido como página.
+  res.set('X-Content-Type-Options', 'nosniff');
+
+  // Ninguém nos põe num iframe para sobrepor botões invisíveis.
+  res.set('X-Frame-Options', 'DENY');
+
+  // O endereço não viaja para sites externos.
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Nada de câmara, microfone ou localização — não usamos nenhum.
+  res.set('Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(self)');
+
+  /**
+   * E o que a página pode carregar.
+   *
+   * O painel não tem scripts nem estilos inline: tudo vive em
+   * ficheiros. Isso permite um CSP apertado — sem
+   * unsafe-inline, que é o que torna a maioria dos CSP
+   * decorativos.
+   *
+   * Cada linha diz de onde pode vir uma coisa. O que não estiver
+   * aqui é bloqueado pelo browser, mesmo que alguém consiga
+   * injetar a etiqueta.
+   */
+  res.set('Content-Security-Policy', [
+    // Por omissão, só o nosso domínio.
+    "default-src 'self'",
+
+    // O Supabase, para a biblioteca.
+    "script-src 'self' https://cdn.jsdelivr.net",
+
+    // As fontes do Google, que precisam do inline no <style> que
+    // elas próprias geram.
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+
+    /**
+     * As imagens: o nosso domínio, data URLs para os SVG
+     * embutidos, e blob para as pré-visualizações de anexos antes
+     * de subirem.
+     */
+    "img-src 'self' data: blob: https:",
+
+    // As ligações: a nossa API, o serviço de drivers e o Supabase.
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co " +
+      "https://airportlink.onrender.com https://drivers.airportlink.app",
+
+    // Ninguém nos põe num iframe, nem nós pomos ninguém.
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+
+    // Sem formulários a apontar para fora.
+    "form-action 'self'",
+
+    // E nada de <base>, que redirecionaria todos os links
+    // relativos.
+    "base-uri 'self'"
+  ].join('; '));
+
+  next();
+});
+
+
 const PORT = process.env.PORT || 3000;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 

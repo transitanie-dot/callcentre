@@ -165,13 +165,26 @@ function bookingWhen(b) {
  * lá não distingue nada.
  */
 function etiquetaPerna(b) {
-  if (b.leg === 2) return '<span class="leg ret">return</span>';
+  var html = '';
 
-  if (b.paired_booking_id || b.trip_group_id) {
-    return '<span class="leg out">out</span>';
+  if (b.leg === 2) {
+    html += '<span class="leg ret">return</span>';
+  } else if (b.paired_booking_id || b.trip_group_id) {
+    html += '<span class="leg out">out</span>';
   }
 
-  return '';
+  /**
+   * A marca da noite.
+   *
+   * Um transfer às três da manhã é mais difícil de atribuir: há
+   * menos motoristas disponíveis. Ver isso na lista, sem abrir a
+   * reserva, é o que permite tratá-la primeiro.
+   */
+  if (b.night_surcharge) {
+    html += '<span class="leg night" title="20% night surcharge">night</span>';
+  }
+
+  return html;
 }
 
 function bookingRef(b) { return b.booking_id || b.booking_reference || String(b.id || '').slice(0, 8); }
@@ -229,7 +242,7 @@ var PARTNER_BUCKET = 'partner-documents';
 var activeConvId = null, renderedAdminMsgIds = new Set();
 var adminChatsChannel = null, adminMessagesChannel = null, adminSelectedFile = null;
 
-var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at, extra_amount, extra_minutes, extra_accepted_at, extra_charged_at, extra_charge_failed, no_show_at, no_show_photo, no_show_note, changed_count, last_changed_at, driver_payout, pickup_type, flight_landed_at, free_until, leg, paired_booking_id, trip_group_id'
+var bookingSelect = 'id, booking_id, booking_reference, pickup, dropoff, booking_date, booking_time, passengers, price, status, payment_status, currency, amount_total, receipt_url, payment_method_type, email, phone_number, phone_code, notes, flight_number, full_name, created_at, user_id, booked_by, agent_commission_pct, agent_gross_price, passenger_name, passenger_email, passenger_phone, stripe_payment_intent_id, refunded_amount, refunded_at, refund_reason, driver_email_hold, driver_email_hold_reason, driver_details_sent_at, manual_driver_name, manual_driver_phone, manual_vehicle, manual_vehicle_plate, payment_mode, charge_at, charged_at, charge_attempts, last_charge_error, pickup_airport, pickup_city, preferred_languages, driver_payout, assigned_partner_id, assigned_at, released_count, pickup_code, driver_arrived_at, code_verified_at, trip_started_at, trip_ended_at, extra_amount, extra_minutes, extra_accepted_at, extra_charged_at, extra_charge_failed, no_show_at, no_show_photo, no_show_note, changed_count, last_changed_at, driver_payout, pickup_type, flight_landed_at, free_until, leg, paired_booking_id, trip_group_id, night_surcharge'
 var activeBooking = null;
 
 // ============================================================
@@ -916,6 +929,20 @@ function openDetails(id) {
         });
       });
     }
+  }
+
+  /**
+   * O suplemento noturno, no detalhe.
+   *
+   * Um agente ao telefone com um cliente que pergunta porque
+   * pagou mais precisa da resposta à mão.
+   */
+  var noite = el('detailNight');
+
+  if (noite && !noite.__missing) {
+    noite.parentElement.hidden = !b.night_surcharge;
+    noite.textContent = b.night_surcharge
+      ? '20% (pick-up 22:55–06:00)' : '';
   }
 
   el('detailPaymentStatus').textContent = b.payment_status || 'N/A';

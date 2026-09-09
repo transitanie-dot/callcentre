@@ -1,3 +1,4 @@
+
 (function () {
 'use strict';
 
@@ -9186,6 +9187,15 @@ function paintTabAlerts() {
 }
 
 function switchTab(name) {
+  /**
+   * Sair da conversa a ecrã inteiro.
+   *
+   * No telemóvel, uma conversa aberta cobre tudo. Mudar de aba sem
+   * a fechar deixava o ecrã preso na conversa, com a aba nova
+   * escondida por trás.
+   */
+  document.body.classList.remove('chat-open');
+
   var btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
   if (!btn) return;
 

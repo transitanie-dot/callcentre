@@ -1301,23 +1301,7 @@
     background:var(--card);
     padding-bottom:env(safe-area-inset-bottom)}
 
-  /* Voltar: primeira linha, sempre visível. */
-  body.chat-open .desk-back{
-    display:flex;align-items:center;gap:7px;flex:0 0 auto;
-    height:42px;padding:0 12px;
-    border-bottom:1px solid var(--border);
-    color:var(--muted);font-size:13px;font-weight:600}
 
-  body.chat-open .desk-back svg{width:16px;height:16px}
-
-  /**
-   * E o painel da conversa preenche o resto.
-   *
-   * O height:100% que estava em linha contava a altura toda,
-   * incluindo a barra de voltar — e o que sobrava saía do ecrã.
-   */
-  body.chat-open .chat-open-pane{
-    flex:1 1 auto;min-height:0;height:auto}
 
   /**
    * Os botões, numa fila que rola.
@@ -1372,7 +1356,6 @@
   /* O que ocupa largura e não é preciso aqui. */
   body.chat-open .chat-clock,
   body.chat-open .reply-warn,
-  body.chat-open .watchers,
   body.chat-open #chatCtx{display:none}
 
   body.chat-open{overflow:hidden}
@@ -2165,11 +2148,27 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
   font-family:inherit;font-size:13px;color:var(--text);margin-bottom:8px}
 .write-panel select:focus{outline:none;border-color:var(--teal)}
 
-/* O painel da conversa aberta.
+/* ============================================================
+   O PAINEL DA CONVERSA ABERTA
+
    Estava em linha no HTML — e um style em linha ganha a qualquer
-   regra, incluindo às do telemóvel. */
+   regra, incluindo às do telemóvel.
+
+   O height:100% é para o ecrã largo, onde o painel tem altura
+   fixa. No telemóvel, o painel é fixo ao ecrã e a conversa divide
+   o espaço com a barra de voltar — por isso a altura tem de ser
+   automática.
+
+   O @media está aqui, ao lado da regra, e não trezentas linhas
+   acima: uma regra escrita depois ganha, e foi assim que a versão
+   móvel deixou de funcionar duas vezes hoje.
+   ============================================================ */
 .chat-open-pane{display:flex;flex-direction:column;height:100%}
 .chat-open-pane.hidden{display:none}
+
+@media (max-width: 820px) {
+  body.chat-open .chat-open-pane{flex:1 1 auto;min-height:0;height:auto}
+}
 
 /* Mudar a palavra-passe. */
 .pw-box input{display:block;width:100%;max-width:340px;margin-bottom:8px;
@@ -2180,3 +2179,44 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
 .pw-msg.bad{color:var(--bad)}
 .pw-msg.ok{color:var(--good)}
 .pw-msg[hidden]{display:none}
+
+
+/* ============================================================
+   O TELEMÓVEL, NO FIM DE PROPÓSITO
+
+   Estas regras têm de vir depois de todas as outras. Uma regra
+   com a mesma especificidade escrita mais abaixo ganha — e foi
+   assim que a conversa no telemóvel deixou de funcionar três
+   vezes hoje: eu escrevia a versão móvel a meio do ficheiro, e
+   trezentas linhas depois havia uma regra geral a desfazê-la.
+
+   Tudo o que for específico do telemóvel para o chat vive aqui.
+   ============================================================ */
+
+@media (max-width: 820px) {
+
+  /**
+   * Voltar à lista.
+   *
+   * O .desk-back tem display:none por omissão — só existe no
+   * telemóvel. Mas a regra que o esconde está mais abaixo do que
+   * a que o mostrava, e ganhava.
+   */
+  body.chat-open .desk-back{
+    display:flex;align-items:center;gap:7px;flex:0 0 auto;
+    height:42px;padding:0 12px;
+    border-bottom:1px solid var(--border);
+    background:var(--card);color:var(--muted);
+    font-size:13px;font-weight:600}
+
+  body.chat-open .desk-back svg{width:16px;height:16px;flex:0 0 auto}
+  body.chat-open .desk-back:active{background:var(--card-2)}
+
+  /* Os outros agentes na conversa ocupam uma linha inteira. No
+     telemóvel, essa linha é a diferença entre ver os botões e
+     não ver. */
+  body.chat-open .watchers{display:none}
+
+  /* E a conversa preenche o que sobra, em vez de 100% do ecrã. */
+  body.chat-open .chat-open-pane{flex:1 1 auto;min-height:0;height:auto}
+}

@@ -7688,6 +7688,7 @@ async function verAlteracoes(bookingId) {
         to: alvo.to,
         kind: alvo.kind,
         subject: (el('writeSubject').value || '').trim(),
+        from: el('writeFrom').value,
         message: texto,
         booking_id: activeBooking && activeBooking.id
       });

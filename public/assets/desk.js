@@ -7641,6 +7641,22 @@ async function verAlteracoes(bookingId) {
     el('writeTo').textContent = 'To ' + alvo.label;
 
     /**
+     * As opções de origem mudam com o destinatário.
+     *
+     * "Passar o que o motorista disse" não faz sentido a escrever
+     * a um parceiro — o motorista é dele. Para ele, o que
+     * interessa é que veio do cliente.
+     */
+    var sel = el('writeFrom');
+
+    sel.innerHTML = tipo === 'partner'
+      ? '<option value="us">From us</option>' +
+        '<option value="customer">Passing on what the customer said</option>'
+      : '<option value="us">From us</option>' +
+        '<option value="driver">Passing on what the driver said</option>' +
+        '<option value="partner">Passing on what the partner said</option>';
+
+    /**
      * O assunto começa com a referência.
      *
      * É o que o cliente vê no email, entre trinta outros. "About

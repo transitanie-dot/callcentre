@@ -1271,150 +1271,110 @@
     border-bottom:1px solid var(--border)}
   .desk-right{min-height:60vh}
 
-  /* Com uma conversa aberta, a lista sai do caminho. */
+  /* ------------------------------------------------------------
+     A CONVERSA NO TELEMÓVEL
+
+     A estrutura é esta:
+
+       #chatPane          o painel da direita
+         .desk-back       voltar à lista
+         #chatOpen        display:flex, column, height:100%
+           .desk-head     nome + botões
+           #chatThread    as mensagens
+           .desk-mode     responder / nota
+           .desk-foot     a caixa de escrita
+
+     O #chatOpen tinha height:100% em linha no HTML. Um style em
+     linha ganha a qualquer regra — e 100% da altura de um painel
+     fixo, mais a barra de voltar, dá mais do que o ecrã. A caixa
+     de escrita ficava por baixo do fundo.
+
+     Agora o painel é fixo, o #chatOpen preenche o que sobra, e o
+     thread é a única coisa que rola.
+     ------------------------------------------------------------ */
+
   body.chat-open .desk-list{display:none}
 
-  /**
-   * A conversa ocupa o ecrã inteiro, com a caixa de escrita colada
-   * ao fundo.
-   *
-   * Sem isto, a conversa era um bloco no meio da página: para
-   * escrever, rolava-se até ao fim, o teclado abria e tapava a
-   * caixa, e a mensagem saía às escuras. Num telemóvel, responder
-   * a um cliente era o mais difícil de tudo o que o painel faz.
-   *
-   * Fixo ao ecrã, com o thread a rolar por dentro e a caixa
-   * sempre visível: é como qualquer app de mensagens funciona, e
-   * é o que o polegar espera.
-   */
   body.chat-open .desk-right{
     position:fixed;inset:0;z-index:50;
     display:flex;flex-direction:column;
-    background:var(--card);min-height:0;
+    background:var(--card);
     padding-bottom:env(safe-area-inset-bottom)}
 
-  /**
-   * A barra de topo da conversa.
-   *
-   * O botão de voltar é irmão do #deskRight, não filho — e o
-   * #deskRight passa a position:fixed quando o chat abre. Um
-   * irmão de um elemento fixo fica por baixo dele, invisível.
-   *
-   * Fixá-lo por cima resolve, e as duas coisas juntas formam a
-   * barra que o polegar procura: sair à esquerda, ações à
-   * direita.
-   */
+  /* Voltar: primeira linha, sempre visível. */
   body.chat-open .desk-back{
-    display:flex;align-items:center;gap:7px;
-    position:fixed;top:0;left:0;right:0;z-index:52;
-    height:46px;padding:0 12px;
-    background:var(--card);
+    display:flex;align-items:center;gap:7px;flex:0 0 auto;
+    height:42px;padding:0 12px;
     border-bottom:1px solid var(--border);
-    color:var(--text);font-size:13.5px;font-weight:600}
+    color:var(--muted);font-size:13px;font-weight:600}
 
-  body.chat-open .desk-back svg{width:17px;height:17px;flex:0 0 auto}
-  body.chat-open .desk-back:active{background:var(--card-2)}
+  body.chat-open .desk-back svg{width:16px;height:16px}
 
   /**
-   * E o painel começa por baixo dela.
+   * E o painel da conversa preenche o resto.
    *
-   * Sem este espaço, a primeira linha da conversa ficava tapada
-   * pela barra.
+   * O height:100% que estava em linha contava a altura toda,
+   * incluindo a barra de voltar — e o que sobrava saía do ecrã.
    */
-  body.chat-open .desk-right{padding-top:46px}
-
-  body.chat-open .desk-head{flex:0 0 auto}
-  body.chat-open .chat-thread,
-  body.chat-open #chatThread{flex:1 1 auto;overflow-y:auto;
-    -webkit-overflow-scrolling:touch;min-height:0}
-  body.chat-open .desk-mode{flex:0 0 auto}
-  body.chat-open .desk-foot{flex:0 0 auto;
-    padding:10px 12px;gap:7px;background:var(--card)}
-
-  /* A caixa cresce com o texto, até quatro linhas. */
-  body.chat-open #chatReply{max-height:110px;font-size:16px}
+  body.chat-open .chat-open-pane{
+    flex:1 1 auto;min-height:0;height:auto}
 
   /**
-   * Os botões da conversa, numa barra que rola.
+   * Os botões, numa fila que rola.
    *
-   * Eram cinco — fechar, resolver, escalar, ver a conta, urgente —
-   * numa linha que quebrava e empurrava o thread para fora do
-   * ecrã. Em quatro linhas de botões, a conversa ficava com um
-   * terço da altura.
-   *
-   * Numa fila horizontal que rola, ocupam uma linha e continuam
-   * todos lá. O primeiro é o que mais se usa.
+   * São cinco. Numa linha que quebra, ocupam quatro linhas e a
+   * conversa fica com um terço da altura.
    */
   body.chat-open .desk-head{
-    flex-wrap:nowrap;padding:10px 12px;gap:10px;align-items:center}
+    flex:0 0 auto;flex-wrap:nowrap;align-items:center;
+    gap:8px;padding:8px 12px}
+
+  body.chat-open .desk-head > div:first-child{
+    flex:0 1 auto;min-width:0;overflow:hidden}
 
   body.chat-open .desk-actions{
-    flex-wrap:nowrap;overflow-x:auto;gap:6px;
+    flex:1 1 auto;flex-wrap:nowrap;overflow-x:auto;gap:5px;
     -webkit-overflow-scrolling:touch;scrollbar-width:none;
-    padding-bottom:2px;margin-left:auto}
+    justify-content:flex-end}
 
   body.chat-open .desk-actions::-webkit-scrollbar{display:none}
 
-  body.chat-open .desk-actions .clear-btn,
-  body.chat-open .desk-actions .doc-no{
-    flex:0 0 auto;padding:5px 8px;font-size:10px;white-space:nowrap;
-    letter-spacing:0}
+  body.chat-open .desk-actions .clear-btn{
+    flex:0 0 auto;padding:5px 8px;font-size:10px;
+    letter-spacing:0;white-space:nowrap}
 
-  /**
-   * O resto da conversa em letra mais pequena.
-   *
-   * Num ecrã de 380 pixels, 14px de letra dão sete palavras por
-   * linha. Uma mensagem de três frases ocupa o ecrã inteiro e a
-   * caixa de escrita fica lá em baixo, a uma rolagem de distância.
-   *
-   * Com 12,5 cabem dez palavras por linha e a mesma mensagem
-   * ocupa dois terços. Continua legível — é o tamanho de uma app
-   * de mensagens — e a conversa cabe.
-   */
-  body.chat-open #chatThread{font-size:12.5px;padding:8px 10px}
-  body.chat-open .d-bub{padding:7px 10px;font-size:12.5px;line-height:1.45}
+  /* O thread é a única coisa que rola. */
+  body.chat-open #chatThread{
+    flex:1 1 auto;min-height:0;overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    font-size:12.5px;padding:8px 10px}
+
+  body.chat-open .desk-mode{flex:0 0 auto;padding:5px 10px 0}
+  body.chat-open .desk-mode .dm{padding:4px 8px;font-size:10.5px}
+
+  /* E a caixa de escrita, colada ao fundo. */
+  body.chat-open .desk-foot{
+    flex:0 0 auto;padding:8px 10px;gap:6px;
+    background:var(--card);border-top:1px solid var(--border)}
+
+  /* 16px para o iOS não dar zoom ao tocar no campo. */
+  body.chat-open #chatReply{font-size:16px;max-height:96px;padding:7px 9px}
+
+  /* Letra mais pequena nas mensagens: num ecrã de 380, 14px dão
+     sete palavras por linha. */
+  body.chat-open .d-bub{padding:6px 9px;font-size:12.5px;line-height:1.45}
   body.chat-open .d-day{font-size:10px;margin:8px 0 4px}
   body.chat-open .d-meta{font-size:9.5px}
   body.chat-open .d-note{font-size:11.5px}
   body.chat-open .msg-ini{width:22px;height:22px;font-size:9px}
-  body.chat-open .desk-head .who{font-size:13px}
-  body.chat-open .desk-head .sub{font-size:10.5px}
-  body.chat-open #chatReply{font-size:14px;padding:8px 10px}
-  body.chat-open .desk-mode{padding:6px 10px 0;font-size:11px}
-  body.chat-open .desk-mode .dm{padding:4px 8px;font-size:10.5px}
+  body.chat-open .who{font-size:12.5px}
 
-  /* O relógio e o aviso de resposta saem: ocupam a largura que os
-     botões precisam, e a informação está na lista. */
+  /* O que ocupa largura e não é preciso aqui. */
   body.chat-open .chat-clock,
-  body.chat-open .reply-warn{display:none}
+  body.chat-open .reply-warn,
+  body.chat-open .watchers,
+  body.chat-open #chatCtx{display:none}
 
-  /**
-   * O contexto do cliente fica, em letra pequena.
-   *
-   * Tinha-o escondido para dar espaço à conversa. Mas quem
-   * responde a um cliente precisa de saber que reserva é, para
-   * quando, e se já pagou — e ir buscá-lo a outro sítio é perder
-   * a linha de pensamento.
-   *
-   * Fica, compacto, a rolar na horizontal se for preciso.
-   */
-  body.chat-open #chatCtx{
-    display:block;flex:0 0 auto;
-    padding:6px 10px;font-size:10.5px;line-height:1.4;
-    max-height:64px;overflow-y:auto;
-    border-bottom:1px solid var(--border-soft);
-    background:var(--card-2)}
-
-  body.chat-open #chatCtx .ctx-row,
-  body.chat-open #chatCtx > div{padding:2px 0}
-  body.chat-open #chatCtx b{font-weight:600}
-
-  /**
-   * O corpo não rola por trás.
-   *
-   * Sem isto, rolar o thread até ao fim continuava a rolar a
-   * página, e a conversa fugia para cima.
-   */
   body.chat-open{overflow:hidden}
   .desk-back{display:none;align-items:center;gap:7px;
     background:transparent;border:0;color:var(--accent);cursor:pointer;
@@ -2204,3 +2164,19 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
   border:1px solid var(--border);background:var(--card);
   font-family:inherit;font-size:13px;color:var(--text);margin-bottom:8px}
 .write-panel select:focus{outline:none;border-color:var(--teal)}
+
+/* O painel da conversa aberta.
+   Estava em linha no HTML — e um style em linha ganha a qualquer
+   regra, incluindo às do telemóvel. */
+.chat-open-pane{display:flex;flex-direction:column;height:100%}
+.chat-open-pane.hidden{display:none}
+
+/* Mudar a palavra-passe. */
+.pw-box input{display:block;width:100%;max-width:340px;margin-bottom:8px;
+  padding:9px 11px;border-radius:9px;border:1px solid var(--border);
+  background:var(--card);font-family:inherit;font-size:13px;color:var(--text)}
+.pw-box input:focus{outline:none;border-color:var(--teal)}
+.pw-msg{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.pw-msg.bad{color:var(--bad)}
+.pw-msg.ok{color:var(--good)}
+.pw-msg[hidden]{display:none}

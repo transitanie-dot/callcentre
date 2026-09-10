@@ -4149,40 +4149,88 @@ el('chatRepliedBtn').addEventListener('click', async function () {
  * porquê é o que separa uma ferramenta de trabalho de uma
  * bisbilhotice.
  */
-el('chatViewAsBtn').addEventListener('click', async function () {
+/**
+ * Ver a conta do cliente, em leitura.
+ *
+ * O motivo é pedido num painel, não num prompt(). No telemóvel, um
+ * prompt quebra a ligação entre o clique e o window.open — e o
+ * browser bloqueia a janela sem dizer porquê.
+ *
+ * Ver a conta de alguém é ver o que ele comprou, quanto pagou e
+ * para onde viajou. Uma linha a dizer porquê é o que separa uma
+ * ferramenta de trabalho de uma bisbilhotice.
+ */
+el('chatViewAsBtn').addEventListener('click', function () {
   var chat = chatAtual();
-  var email = chat.email;
 
-  if (!email) {
+  if (!chat.email) {
     return avisar('Heads up', 'This conversation has no email on it.');
   }
 
-  var motivo = prompt(
-    'Why are you opening ' + email + '?\n\n' +
-    'One line. It goes in the log a supervisor can read.'
-  );
+  el('viewAsWhy').value = '';
+  el('viewAsAsk').hidden = false;
+  el('viewAsWhy').focus();
+});
 
-  if (motivo === null) return;
+
+el('viewAsCancel').addEventListener('click', function () {
+  el('viewAsAsk').hidden = true;
+});
+
+
+el('viewAsGo').addEventListener('click', async function () {
+  var chat = chatAtual();
+  var motivo = (el('viewAsWhy').value || '').trim();
+
+  var btn = el('viewAsGo');
+  btn.disabled = true;
+  btn.textContent = 'Opening...';
 
   try {
     var r = await deskFetch('/api/admin/view-as', {
-      email: email,
+      email: chat.email,
       kind: chat.source === 'partner' ? 'partner'
         : (chat.audience === 'agency' ? 'agency' : 'customer'),
-      reason: motivo.trim() || null,
+      reason: motivo || null,
       chat_id: desk.current
     });
+
+    el('viewAsAsk').hidden = true;
+
+    if (!r.url || !/^https?:\/\//.test(String(r.url))) {
+      return avisar('Could not open it',
+        'The server did not return a link.');
+    }
 
     if (!r.has_account) {
       avisar('Heads up',
         'There is no account with that email. You will see the ' +
-        'bookings, but the page will look empty to them too — which ' +
-        'may well be the problem.');
+        'bookings, but the page looks empty to them too — which may ' +
+        'well be the problem.');
     }
 
-    window.open(r.url, '_blank', 'noopener');
+    /**
+     * Uma ligação em vez de window.open.
+     *
+     * O clique já passou por um pedido ao servidor, e nessa altura
+     * o browser deixou de o considerar uma ação do utilizador —
+     * bloqueia a janela em silêncio.
+     *
+     * Criar um <a> e clicá-lo funciona nos dois: o clique é
+     * sintético mas parte de um elemento real.
+     */
+    var a = document.createElement('a');
+    a.href = r.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   } catch (e) {
     avisar('Could not open it', e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Open';
   }
 });
 

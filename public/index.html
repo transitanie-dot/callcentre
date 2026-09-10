@@ -1095,6 +1095,15 @@
     </div>
 
     <div class="write-panel" id="writePanel" hidden>
+      <!-- De quem é a mensagem.
+           Uma citação do motorista lê-se de outra maneira quando
+           se sabe que é dele. -->
+      <select id="writeFrom">
+        <option value="us">From us</option>
+        <option value="driver">Passing on what the driver said</option>
+        <option value="partner">Passing on what the partner said</option>
+      </select>
+
       <input type="text" id="writeSubject" placeholder="Subject — what this is about">
       <textarea id="writeBody" rows="4" placeholder="They get this by email, with a link to reply."></textarea>
 

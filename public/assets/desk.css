@@ -2219,4 +2219,24 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
 
   /* E a conversa preenche o que sobra, em vez de 100% do ecrã. */
   body.chat-open .chat-open-pane{flex:1 1 auto;min-height:0;height:auto}
+
+  /**
+   * O cabeçalho do painel sai do caminho.
+   *
+   * ESTA era a causa. O <header> é sticky com z-index:60; o painel
+   * da conversa é fixo com z-index:50. O cabeçalho ficava por cima
+   * dos 62 primeiros pixels — exatamente onde está a barra de
+   * botões.
+   *
+   * Passei três tentativas a mexer no CSS do chat quando o
+   * problema estava noutro elemento.
+   *
+   * Com a conversa aberta ele não serve para nada: o logótipo, o
+   * estado do agente e o relógio não se usam a meio de uma
+   * resposta, e voltam assim que se sai da conversa.
+   */
+  body.chat-open .header{display:none}
+
+  /* E a barra de separadores, pela mesma razão. */
+  body.chat-open .deskbar{display:none}
 }

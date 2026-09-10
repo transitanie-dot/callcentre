@@ -1,3 +1,4 @@
+
 .chat-clock{display:flex;flex-direction:column;align-items:flex-end;gap:2px;
   padding:0 14px;margin-left:auto}
 .clock-t{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:19px;
@@ -1272,7 +1273,6 @@
 
   /* Com uma conversa aberta, a lista sai do caminho. */
   body.chat-open .desk-list{display:none}
-  body.chat-open .desk-back{display:inline-flex}
 
   /**
    * A conversa ocupa o ecrã inteiro, com a caixa de escrita colada
@@ -1292,6 +1292,36 @@
     display:flex;flex-direction:column;
     background:var(--card);min-height:0;
     padding-bottom:env(safe-area-inset-bottom)}
+
+  /**
+   * A barra de topo da conversa.
+   *
+   * O botão de voltar é irmão do #deskRight, não filho — e o
+   * #deskRight passa a position:fixed quando o chat abre. Um
+   * irmão de um elemento fixo fica por baixo dele, invisível.
+   *
+   * Fixá-lo por cima resolve, e as duas coisas juntas formam a
+   * barra que o polegar procura: sair à esquerda, ações à
+   * direita.
+   */
+  body.chat-open .desk-back{
+    display:flex;align-items:center;gap:7px;
+    position:fixed;top:0;left:0;right:0;z-index:52;
+    height:46px;padding:0 12px;
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    color:var(--text);font-size:13.5px;font-weight:600}
+
+  body.chat-open .desk-back svg{width:17px;height:17px;flex:0 0 auto}
+  body.chat-open .desk-back:active{background:var(--card-2)}
+
+  /**
+   * E o painel começa por baixo dela.
+   *
+   * Sem este espaço, a primeira linha da conversa ficava tapada
+   * pela barra.
+   */
+  body.chat-open .desk-right{padding-top:46px}
 
   body.chat-open .desk-head{flex:0 0 auto}
   body.chat-open .chat-thread,
@@ -1352,45 +1382,6 @@
   body.chat-open #chatReply{font-size:14px;padding:8px 10px}
   body.chat-open .desk-mode{padding:6px 10px 0;font-size:11px}
   body.chat-open .desk-mode .dm{padding:4px 8px;font-size:10.5px}
-
-  /**
-   * O botão de voltar, colado ao topo.
-   *
-   * É irmão do cabeçalho, não filho — fica numa linha própria
-   * acima dele. Isso está bem: é o primeiro que o polegar
-   * encontra, e não rouba largura aos outros.
-   *
-   * Fixo, para não fugir com o thread a rolar. Sem isto, quem
-   * descesse na conversa perdia a única saída.
-   */
-  body.chat-open .desk-back{
-    display:inline-flex;flex:0 0 auto;
-    padding:11px 14px;gap:8px;
-    border-bottom:1px solid var(--border-soft);
-    width:100%;justify-content:flex-start;
-    background:var(--card);color:var(--muted);
-    font-size:13.5px;font-weight:600}
-
-  body.chat-open .desk-back svg{width:17px;height:17px}
-  body.chat-open .desk-back:active{background:var(--card-2)}
-
-  /**
-   * E um X à direita, para fechar.
-   *
-   * O "All conversations" está em cima e é o que se lê. Mas quem
-   * quer sair procura um X no canto — é onde está em todas as
-   * apps, e é onde o polegar vai sem pensar.
-   *
-   * Feito com o próprio desk-back: um pseudo-elemento à direita,
-   * que responde ao mesmo clique. Sem HTML novo.
-   */
-  body.chat-open .desk-back{position:relative;padding-right:52px}
-  body.chat-open .desk-back::after{
-    content:'\00d7';position:absolute;right:10px;top:50%;
-    transform:translateY(-50%);width:34px;height:34px;
-    display:flex;align-items:center;justify-content:center;
-    border-radius:9px;background:var(--card-2);
-    font-size:22px;line-height:1;color:var(--text)}
 
   /* O relógio e o aviso de resposta saem: ocupam a largura que os
      botões precisam, e a informação está na lista. */

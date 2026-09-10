@@ -2207,3 +2207,9 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
   .write-foot{flex-wrap:wrap}
   .write-to{flex:1 1 100%;margin-bottom:6px}
 }
+
+/* O seletor de origem, com o mesmo aspeto dos campos ao lado. */
+.write-panel select{width:100%;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--border);background:var(--card);
+  font-family:inherit;font-size:13px;color:var(--text);margin-bottom:8px}
+.write-panel select:focus{outline:none;border-color:var(--teal)}

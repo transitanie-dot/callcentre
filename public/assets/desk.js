@@ -1,4 +1,3 @@
-
 (function () {
 'use strict';
 
@@ -945,6 +944,22 @@ function openDetails(id) {
     noite.textContent = b.night_surcharge
       ? '20% (pick-up 22:55–06:00)' : '';
   }
+
+  /**
+   * O botão de escrever ao parceiro só quando há um.
+   *
+   * Uma reserva sem parceiro atribuído não tem a quem escrever, e
+   * um botão que dá erro é pior do que um que não está lá.
+   */
+  var wp = el('writePartnerBtn');
+
+  if (wp && !wp.__missing) {
+    wp.classList.toggle('hidden', !b.assigned_partner_id);
+  }
+
+  // E o painel fecha-se ao mudar de reserva.
+  var painel = el('writePanel');
+  if (painel && !painel.__missing) painel.hidden = true;
 
   el('detailPaymentStatus').textContent = b.payment_status || 'N/A';
   el('detailRefunded').textContent = Number(b.refunded_amount || 0) > 0
@@ -7589,6 +7604,122 @@ async function verAlteracoes(bookingId) {
     avisar('Could not load', e.message);
   }
 }
+
+
+// ============================================================
+// ESCREVER PRIMEIRO
+//
+// Só se respondia a quem escrevia. Um agente que precise de avisar
+// alguém — o voo mudou, o motorista atrasou-se, falta um dado —
+// não tinha por onde.
+//
+// A conversa nasce como ticket, atribuída a quem escreveu, e o
+// destinatário recebe email com um link para responder.
+// ============================================================
+(function () {
+  var alvo = null;
+
+  function abrir(tipo) {
+    var b = activeBooking;
+    if (!b) return;
+
+    if (tipo === 'partner') {
+      if (!b.assigned_partner_id) {
+        return avisar('Heads up', 'This ride has no partner assigned yet.');
+      }
+
+      alvo = { kind: 'partner', to: b.assigned_partner_id,
+               label: b.partner_name || 'the partner' };
+    } else {
+      if (!b.email) {
+        return avisar('Heads up', 'This booking has no email on it.');
+      }
+
+      alvo = { kind: 'customer', to: b.email, label: b.email };
+    }
+
+    el('writeTo').textContent = 'To ' + alvo.label;
+
+    /**
+     * O assunto começa com a referência.
+     *
+     * É o que o cliente vê no email, entre trinta outros. "About
+     * your transfer AL2633934" reconhece-se; "A message from
+     * Airportlink" podia ser publicidade.
+     */
+    el('writeSubject').value = 'About your transfer ' +
+      (b.booking_id || b.booking_reference || '');
+
+    el('writeBody').value = '';
+    el('writeErr').hidden = true;
+    el('writePanel').hidden = false;
+    el('writeBody').focus();
+  }
+
+  el('writeCustomerBtn').addEventListener('click', function () {
+    abrir('customer');
+  });
+
+  el('writePartnerBtn').addEventListener('click', function () {
+    abrir('partner');
+  });
+
+  el('writeCancel').addEventListener('click', function () {
+    el('writePanel').hidden = true;
+  });
+
+  el('writeSend').addEventListener('click', async function () {
+    if (!alvo) return;
+
+    var texto = (el('writeBody').value || '').trim();
+
+    if (!texto) {
+      el('writeErr').hidden = false;
+      el('writeErr').textContent = 'Write something first.';
+      return;
+    }
+
+    var btn = el('writeSend');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+      var r = await deskFetch('/api/admin/chat/new', {
+        to: alvo.to,
+        kind: alvo.kind,
+        subject: (el('writeSubject').value || '').trim(),
+        message: texto,
+        booking_id: activeBooking && activeBooking.id
+      });
+
+      el('writePanel').hidden = true;
+
+      /**
+       * E abre a conversa.
+       *
+       * Quem escreve costuma querer ver a resposta. Deixá-lo na
+       * página das reservas obrigava-o a ir procurá-la na fila.
+       */
+      avisar('Sent',
+        r.existing
+          ? 'Added to the conversation they already had open.'
+          : 'They will get it by email, with a link to reply.');
+
+      switchTab('chatTab');
+
+      setTimeout(function () {
+        openDeskChat(r.chat_id, alvo.kind === 'partner' ? 'partner' : 'support');
+      }, 300);
+    } catch (e) {
+      el('writeErr').hidden = false;
+      el('writeErr').textContent = e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send';
+    }
+  });
+})();
+
 
 // ============================================================
 // PROCURAR UM TICKET

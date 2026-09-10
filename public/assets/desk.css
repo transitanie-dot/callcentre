@@ -2240,3 +2240,15 @@ html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
   /* E a barra de separadores, pela mesma razão. */
   body.chat-open .deskbar{display:none}
 }
+
+/* Porquê, antes de abrir a conta de alguém.
+   Era um prompt() — e no telemóvel um prompt quebra a ligação
+   entre o clique e a janela nova, que o browser então bloqueia. */
+.viewas-ask{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0;
+  padding:12px;border-radius:12px;background:var(--card-2);
+  border:1px solid var(--border)}
+.viewas-ask[hidden]{display:none}
+.viewas-ask input{flex:1 1 200px;padding:8px 11px;border-radius:9px;
+  border:1px solid var(--border);background:var(--card);
+  font-family:inherit;font-size:13px;color:var(--text)}
+.viewas-ask input:focus{outline:none;border-color:var(--teal)}

@@ -1,3 +1,4 @@
+
 (function () {
 'use strict';
 
@@ -7733,6 +7734,85 @@ async function verAlteracoes(bookingId) {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Send';
+    }
+  });
+})();
+
+
+
+// ============================================================
+// MUDAR A PALAVRA-PASSE
+//
+// A conta existia e não se geria: um agente que quisesse mudar
+// tinha de sair e fingir que se tinha esquecido.
+//
+// A rota vive na API principal — é a mesma tabela de utilizadores
+// por trás dos quatro portais.
+// ============================================================
+(function () {
+  var btn = el('pwSave');
+  if (!btn || btn.__missing) return;
+
+  var MAIN_API = 'https://airportlink.onrender.com';
+
+  btn.addEventListener('click', async function () {
+    var msg = el('pwMsg');
+    var atual = el('pwCurrent').value;
+    var nova = el('pwNew').value;
+    var repete = el('pwConfirm').value;
+
+    msg.hidden = false;
+    msg.className = 'pw-msg bad';
+
+    if (!atual) { msg.textContent = 'Enter your current password.'; return; }
+
+    if (nova.length < 8) {
+      msg.textContent = 'The new password needs at least 8 characters.';
+      return;
+    }
+
+    if (nova !== repete) {
+      msg.textContent = 'The two new passwords do not match.';
+      return;
+    }
+
+    btn.disabled = true;
+    var antes = btn.textContent;
+    btn.textContent = 'Changing...';
+
+    try {
+      var sess = await client.auth.getSession();
+      var token = sess.data && sess.data.session && sess.data.session.access_token;
+
+      if (!token) throw new Error('Your session expired. Sign in again.');
+
+      var res = await fetch(MAIN_API + '/api/account/password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ current_password: atual, new_password: nova })
+      });
+
+      var d = await res.json();
+
+      if (!res.ok) {
+        msg.textContent = d.error || 'Could not change it.';
+        return;
+      }
+
+      msg.className = 'pw-msg ok';
+      msg.textContent = d.message || 'Password changed.';
+
+      el('pwCurrent').value = '';
+      el('pwNew').value = '';
+      el('pwConfirm').value = '';
+    } catch (e) {
+      msg.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = antes;
     }
   });
 })();

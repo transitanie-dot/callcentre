@@ -1083,6 +1083,30 @@
       <div><div class="detail-label">Status</div><div class="detail-value"><span id="detailStatus"></span></div></div>
       <div class="detail-full"><div class="detail-label">Notes</div><div class="detail-value" id="detailNotes"></div></div>
     </div>
+    <!-- ============ ESCREVER AO CLIENTE ============
+         Só se respondia a quem escrevia. Um agente que precise de
+         avisar alguém — o voo mudou, o motorista atrasou-se, falta
+         um dado — não tinha por onde.
+
+         Daqui, a conversa já vem ligada a esta reserva. -->
+    <div class="write-box">
+      <button class="clear-btn" id="writeCustomerBtn" type="button">Message the customer</button>
+      <button class="clear-btn hidden" id="writePartnerBtn" type="button">Message the partner</button>
+    </div>
+
+    <div class="write-panel" id="writePanel" hidden>
+      <input type="text" id="writeSubject" placeholder="Subject — what this is about">
+      <textarea id="writeBody" rows="4" placeholder="They get this by email, with a link to reply."></textarea>
+
+      <div class="write-foot">
+        <span class="write-to" id="writeTo"></span>
+        <button class="btn line sm" id="writeCancel" type="button">Cancel</button>
+        <button class="btn sm" id="writeSend" type="button">Send</button>
+      </div>
+
+      <p class="write-err" id="writeErr" hidden></p>
+    </div>
+
     <!-- Quem vai buscar o cliente. Aparece só quando a viagem é
          nos próximos dias: antes disso é cedo para decidir. -->
     <div class="driver-box hidden" id="driverBox">

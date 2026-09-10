@@ -674,7 +674,28 @@
         </tr></thead><tbody id="shiftBody">
           <tr><td colspan="11" class="loading-row">Loading...</td></tr>
         </tbody></table>
+      
+      <!-- Mudar a palavra-passe.
+           A conta existia e não se geria: um agente que quisesse
+           mudar tinha de sair e fingir que se tinha esquecido. -->
+      <div class="card" style="margin-top:18px">
+        <h2 class="card-t">Your password</h2>
+
+        <div class="pw-box">
+          <input type="password" id="pwCurrent" placeholder="Current password"
+                 autocomplete="current-password">
+          <input type="password" id="pwNew" placeholder="New password — at least 8 characters"
+                 autocomplete="new-password">
+          <input type="password" id="pwConfirm" placeholder="Repeat the new password"
+                 autocomplete="new-password">
+
+          <button class="btn sm" id="pwSave" type="button">Change password</button>
+
+          <p class="pw-msg" id="pwMsg" hidden></p>
+        </div>
       </div>
+
+</div>
       <div id="shiftNote" style="margin-top:12px;color:var(--muted);font-size:12.5px;line-height:1.6"></div>
     </div>
 
@@ -840,7 +861,12 @@
             All conversations
           </button>
 
-          <div class="hidden" id="chatOpen" style="display:flex;flex-direction:column;height:100%">
+          <!-- O estilo saiu do HTML para o CSS.
+               Um style em linha ganha a qualquer regra, e era isso
+               que impedia o telemóvel de reorganizar a conversa:
+               height:100% num painel fixo empurra a barra de
+               ações e a caixa de escrita para fora do ecrã. -->
+          <div class="hidden chat-open-pane" id="chatOpen">
             <!-- Os outros agentes que estão a ver. Sem isto, dois
                  escrevem ao mesmo tempo sem saber um do outro, e o
                  parceiro recebe duas respostas à mesma pergunta. -->

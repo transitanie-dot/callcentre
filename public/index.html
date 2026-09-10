@@ -906,6 +906,20 @@
                      minha reserva" precisa de ver o ecrã dele, não
                      os dados. Abre em leitura, dez minutos. -->
                 <button class="clear-btn" id="chatViewAsBtn" type="button">View their account</button>
+
+                <!-- Porquê, antes de abrir.
+                     Era um prompt() — e no telemóvel um prompt
+                     quebra a ligação entre o clique e o
+                     window.open, que o browser então bloqueia.
+
+                     Um painel resolve isso, e ainda deixa ler o
+                     que se está a pedir. -->
+                <div class="viewas-ask" id="viewAsAsk" hidden>
+                  <input type="text" id="viewAsWhy"
+                         placeholder="Why are you opening this account?">
+                  <button class="btn line sm" id="viewAsCancel" type="button">Cancel</button>
+                  <button class="btn sm" id="viewAsGo" type="button">Open</button>
+                </div>
                 <!-- Respondi, agora espero.
                      Diferente de resolver: o ticket continua aberto e
                      o cliente pode responder. Sai é da lista de "a

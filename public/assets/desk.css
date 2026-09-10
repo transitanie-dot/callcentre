@@ -2177,3 +2177,33 @@ html[data-theme="dark"] .leg.ret{color:#C084FC}
 .leg.night{background:rgba(30,41,90,.12);color:#1E293B}
 html[data-theme="dark"] .leg.night{background:rgba(148,163,255,.15);
   color:#A5B4FC}
+
+/* ============================================================
+   ESCREVER PRIMEIRO
+
+   Só se respondia a quem escrevia. Daqui, a conversa nasce do
+   nosso lado e já vem ligada à reserva.
+   ============================================================ */
+.write-box{display:flex;gap:8px;margin:16px 0 0;flex-wrap:wrap}
+
+.write-panel{margin:12px 0 0;padding:14px;border-radius:12px;
+  background:var(--card-2);border:1px solid var(--border)}
+.write-panel[hidden]{display:none}
+
+.write-panel input,.write-panel textarea{width:100%;padding:9px 11px;
+  border-radius:9px;border:1px solid var(--border);background:var(--card);
+  font-family:inherit;font-size:13px;color:var(--text);margin-bottom:8px}
+.write-panel textarea{resize:vertical;min-height:80px;line-height:1.5}
+.write-panel input:focus,.write-panel textarea:focus{outline:none;
+  border-color:var(--teal)}
+
+.write-foot{display:flex;align-items:center;gap:8px}
+.write-to{flex:1;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+.write-err{margin:8px 0 0;font-size:12px;color:var(--bad)}
+.write-err[hidden]{display:none}
+
+@media (max-width:640px){
+  .write-foot{flex-wrap:wrap}
+  .write-to{flex:1 1 100%;margin-bottom:6px}
+}

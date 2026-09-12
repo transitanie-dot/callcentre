@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------
  * O painel de operações, servido da sua própria origem.
  *
- * Antes vivia dentro de um iframe do Wix, e isso custava três
+ * Antes vivia dentro  de um iframe do Wix, e isso custava três
  * coisas:
  *
  *  - Dois segundos de latência por chamada, porque cada pedido
